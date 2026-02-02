@@ -24,9 +24,10 @@
 ## Screenshots
 
 <p align="center">
-  <img width="1102" height="931" alt="Screenshot_20260202_203943" src="https://github.com/user-attachments/assets/5feff02d-6543-4be5-91b3-eb9442c00e95" />
-  <img width="1102" height="931" alt="Screenshot_20260202_204006" src="https://github.com/user-attachments/assets/71191ac3-16b8-47f1-9a35-1292538f32dd" />
- <img width="1102" height="931" alt="Screenshot_20260202_204015" src="https://github.com/user-attachments/assets/483a31c7-7e2a-48e9-99d6-4f32ca1eb6c9" />
+<img width="1098" height="931" alt="Screenshot_20260202_210256" src="https://github.com/user-attachments/assets/09d2a1e1-656c-4a63-a87c-0e89fae223d2" />
+<img width="1098" height="931" alt="Screenshot_20260202_210249" src="https://github.com/user-attachments/assets/8576e3ec-9fa2-4518-8740-ef641a2385cb" />
+<img width="1098" height="931" alt="Screenshot_20260202_210236" src="https://github.com/user-attachments/assets/4971339a-ec6a-45bd-9974-bcda6fe694c5" />
+<img width="1098" height="931" alt="Screenshot_20260202_210220" src="https://github.com/user-attachments/assets/84e455b6-1340-4b91-8af4-3bbe515269cf" />
 </p>
 
 ---
