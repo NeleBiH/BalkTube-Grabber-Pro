@@ -24,7 +24,9 @@
 ## Screenshots
 
 <p align="center">
-  <img src="https://github.com/NeleBiH/BalkTube-Grabber-Pro/raw/main/screenshots/main.png" alt="Main Window" width="700"/>
+  <img width="1102" height="931" alt="Screenshot_20260202_203943" src="https://github.com/user-attachments/assets/5feff02d-6543-4be5-91b3-eb9442c00e95" />
+  <img width="1102" height="931" alt="Screenshot_20260202_204006" src="https://github.com/user-attachments/assets/71191ac3-16b8-47f1-9a35-1292538f32dd" />
+ <img width="1102" height="931" alt="Screenshot_20260202_204015" src="https://github.com/user-attachments/assets/483a31c7-7e2a-48e9-99d6-4f32ca1eb6c9" />
 </p>
 
 ---
