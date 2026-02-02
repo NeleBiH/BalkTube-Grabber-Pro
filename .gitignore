@@ -1,1 +1,45 @@
+# Virtual environment
+.venv/
+venv/
+env/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.directory
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+pasted*.png
+
+# Build outputs (large files)
+*.AppImage
+build-standalone/
+
+# Local dev files
+zadnji prompt
+moguce ideje za buducnost.md
+problemi.txt
+DOCUMENTATION.md
+PROBLEMI.md
