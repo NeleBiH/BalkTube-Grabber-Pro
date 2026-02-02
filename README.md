@@ -24,10 +24,11 @@
 ## Screenshots
 
 <p align="center">
+<img width="1098" height="931" alt="Screenshot_20260202_210220" src="https://github.com/user-attachments/assets/84e455b6-1340-4b91-8af4-3bbe515269cf" />
 <img width="1098" height="931" alt="Screenshot_20260202_210256" src="https://github.com/user-attachments/assets/09d2a1e1-656c-4a63-a87c-0e89fae223d2" />
 <img width="1098" height="931" alt="Screenshot_20260202_210249" src="https://github.com/user-attachments/assets/8576e3ec-9fa2-4518-8740-ef641a2385cb" />
 <img width="1098" height="931" alt="Screenshot_20260202_210236" src="https://github.com/user-attachments/assets/4971339a-ec6a-45bd-9974-bcda6fe694c5" />
-<img width="1098" height="931" alt="Screenshot_20260202_210220" src="https://github.com/user-attachments/assets/84e455b6-1340-4b91-8af4-3bbe515269cf" />
+
 </p>
 
 ---
