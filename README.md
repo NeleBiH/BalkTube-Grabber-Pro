@@ -152,8 +152,6 @@ Access settings via the **Settings** tab.
 ## Known Bugs
 
 - **Stop button stays active after closing video player** - After an external video player (VLC, MPV) is closed, the Stop button remains in active state instead of reverting to Play. **Workaround:** Press the Stop button manually to reset it.
-- **Default language set to Croatian instead of English** - On first launch the app defaults to Croatian/Serbian instead of English. **Workaround:** Change language in Settings and restart the app.
-
 ---
 
 ## Troubleshooting

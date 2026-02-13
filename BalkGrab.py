@@ -718,7 +718,7 @@ class BalkGrabGrabber(QMainWindow):
 
         # Settings
         self.settings = QSettings("BalkGrab", "BalkGrab")
-        self.current_language = self.settings.value("language", "hr")
+        self.current_language = self.settings.value("language", "en")
         self.tr = TRANSLATIONS[self.current_language]
 
         self.setWindowTitle(self.tr['app_title'])
