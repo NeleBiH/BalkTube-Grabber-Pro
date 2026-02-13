@@ -28,139 +28,66 @@
 <img width="1098" height="931" alt="Screenshot_20260202_210236" src="https://github.com/user-attachments/assets/4971339a-ec6a-45bd-9974-bcda6fe694c5" />
 <img width="1098" height="931" alt="Screenshot_20260202_210249" src="https://github.com/user-attachments/assets/8576e3ec-9fa2-4518-8740-ef641a2385cb" />
 <img width="1098" height="931" alt="Screenshot_20260202_210256" src="https://github.com/user-attachments/assets/09d2a1e1-656c-4a63-a87c-0e89fae223d2" />
-
-
-
 </p>
 
 ---
 
 ## Features
 
-### Search & Preview
 - **YouTube Search** - Search directly from the app
 - **Direct URL Support** - Paste any YouTube link
 - **Live Preview** - Stream and preview before downloading
-- **Seek & Volume Control** - Full playback controls
-
-### Download Options
-| Video Formats | Audio Formats |
-|--------------|---------------|
-| 4K (2160p) | MP3 (128-320kbps) |
-| 2K (1440p) | AAC (192-256kbps) |
-| Full HD (1080p) | FLAC (lossless) |
-| HD (720p) | WAV (lossless) |
-| 480p, 360p, 240p | OGG (192-320kbps) |
-
-### Built-in Media Player
-- Play downloaded audio files instantly
-- Seek bar with time display
-- Volume control
-- External player support for video files
-
-### Multi-Language Support
-- English
-- Deutsch
-- Hrvatski/Srpski
-
-### Modern UI
-- Dark theme
-- Responsive design
-- System tray support
-- Desktop notifications
+- **Video Downloads** - 4K, 2K, 1080p, 720p, 480p, 360p, 240p
+- **Audio Downloads** - MP3, AAC, FLAC, WAV, OGG
+- **Built-in Media Player** - Play downloaded files instantly
+- **Multi-Language** - English, Deutsch, Hrvatski/Srpski
+- **Dark Theme** - Modern UI with system tray support
 
 ---
 
 ## Installation
 
-### Method 1: Quick Install (Linux - Recommended)
+### Linux (Recommended)
 
 ```bash
-# Clone the repository
 git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
-
-# Run the installer
-./install.sh
+./setup.sh
 ```
 
-The installer will:
+Choose **1) Install / Update** from the menu. This will:
 - Install the program to `~/.balkgrab/`
-- Set up a Python virtual environment with all dependencies
-- Install icons to your system
-- Create a menu entry (works with KDE, GNOME, XFCE, etc.)
-- Install [deno](https://deno.land/) for YouTube signature solving
+- Set up Python virtual environment with all dependencies
+- Install icons and create a menu entry
+- Clean up any old versions (BalkTube Grabber, etc.)
 
 After installation, find **BalkGrab** in your application menu!
 
-### Method 2: Run Without Installing (Linux)
+### Linux (Run Without Installing)
 
 ```bash
-# Clone the repository
 git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
-
-# Run directly (auto-creates venv on first run)
 ./run.sh
 ```
 
-### Method 3: AppImage (Linux)
+### Windows
+
+Download **BalkGrab.exe** from the [Releases](https://github.com/NeleBiH/BalkGrab/releases) page.
+
+> **Note:** FFmpeg is required for audio conversion. Download from https://ffmpeg.org and add to PATH.
+
+### Manual (Any Platform)
 
 ```bash
-# Build standalone AppImage (includes Python + all dependencies)
-./build-appimage-standalone.sh
-
-# Run the AppImage (no installation needed!)
-chmod +x BalkGrab-0.1.2-x86_64.AppImage
-./BalkGrab-0.1.2-x86_64.AppImage
-```
-
-**Note:** The AppImage is fully portable (~260MB) - no Python or dependencies needed!
-
-### Method 4: Manual Installation (Linux/Windows/macOS)
-
-```bash
-# Create virtual environment
 python3 -m venv .venv
+source .venv/bin/activate    # Linux/macOS
+# .venv\Scripts\activate     # Windows
 
-# Activate (Linux/macOS)
-source .venv/bin/activate
-
-# Activate (Windows)
-.venv\Scripts\activate
-
-# Install dependencies
 pip install PySide6 yt-dlp requests
-
-# Install latest yt-dlp (recommended)
 pip install --upgrade --pre yt-dlp
 
-# Run
-python "BalkGrab.py"
-```
-
-### Method 5: Windows Standalone EXE
-
-```powershell
-# Option A: Run the build script (creates standalone .exe)
-.\build-exe.bat
-
-# Option B: PowerShell version
-powershell -ExecutionPolicy Bypass -File build-exe.ps1
-
-# The exe will be in: dist\BalkGrab.exe
-```
-
-### Method 6: Windows Manual Run
-
-```powershell
-# Install dependencies
-pip install PySide6 yt-dlp requests
-
-# Download FFmpeg from https://ffmpeg.org and add to PATH
-
-# Run
-python "BalkGrab.py"
+python BalkGrab.py
 ```
 
 ---
@@ -170,45 +97,26 @@ python "BalkGrab.py"
 - **Python 3.9+**
 - **FFmpeg** (for audio conversion)
 
-### Installing FFmpeg
-
-**Arch/Manjaro:**
 ```bash
+# Arch/Manjaro
 sudo pacman -S ffmpeg
-```
 
-**Ubuntu/Debian:**
-```bash
+# Ubuntu/Debian
 sudo apt install ffmpeg
-```
 
-**Fedora:**
-```bash
+# Fedora
 sudo dnf install ffmpeg
 ```
-
-**Windows:**
-Download from https://ffmpeg.org/download.html and add to PATH.
 
 ---
 
 ## Uninstallation
 
-### Linux (if installed with install.sh)
-
 ```bash
-./uninstall.sh
+./setup.sh
 ```
 
-This will:
-- Remove the program from `~/.balkgrab/`
-- Remove icons from your system
-- Remove the menu entry
-
-**Note:** User settings in `~/.config/BalkGrab` are preserved. To remove them too:
-```bash
-rm -rf ~/.config/BalkGrab
-```
+Choose **2) Uninstall** from the menu. This removes the program, icons, menu entry, settings, and cleans up any old versions.
 
 ---
 
@@ -222,49 +130,21 @@ rm -rf ~/.config/BalkGrab
 
 ---
 
-## Technical Details
-
-- **GUI Framework**: PySide6 (Qt for Python)
-- **YouTube Backend**: yt-dlp
-- **Audio Conversion**: FFmpeg
-- **JavaScript Runtime**: deno (for YouTube signature solving)
-- **Architecture**: Multi-threaded with Qt signals/slots
-- **Settings**: QSettings (persistent)
-
-### Thread Safety
-- SearchWorker - YouTube search
-- ThumbnailWorker - Async thumbnail loading
-- DownloadWorker - Video/audio download
-- Preview streaming runs in background thread
-
----
-
 ## Troubleshooting
 
 ### "Signature extraction failed" or 403 errors
-YouTube frequently changes their API. Update yt-dlp:
 ```bash
 pip install --upgrade --pre yt-dlp
 ```
 
 ### Audio conversion not working
-Make sure FFmpeg is installed and in your PATH:
 ```bash
-ffmpeg -version
-```
-
-### App won't start
-Ensure you have Python 3.9+ and all dependencies installed:
-```bash
-python3 --version
-pip list | grep -E "PySide6|yt-dlp"
+ffmpeg -version  # Make sure FFmpeg is installed
 ```
 
 ### Video won't play (Linux)
-Make sure you have a video player installed (VLC, MPV, etc.):
 ```bash
-sudo pacman -S vlc  # Arch
-sudo apt install vlc  # Ubuntu/Debian
+sudo pacman -S vlc  # or mpv
 ```
 
 ---
@@ -273,37 +153,16 @@ sudo apt install vlc  # Ubuntu/Debian
 
 MIT License - See [LICENSE](LICENSE) for details.
 
-### Third-Party Licenses
-- **PySide6**: LGPL v3
-- **yt-dlp**: Unlicense (Public Domain)
-- **FFmpeg**: LGPL/GPL
-- **deno**: MIT
-
----
-
-## Contributing
-
-Contributions are welcome! Feel free to:
-- Report bugs
-- Suggest features
-- Submit pull requests
-
 ---
 
 ## Author
 
 **NeleBiH** - [GitHub](https://github.com/NeleBiH)
 
----
-
-## AI-Generated Code
-
-> **Note:** This application was created with the assistance of [Claude Code](https://claude.ai/claude-code) (Anthropic's AI coding assistant). The code is provided as-is and may require adjustments or improvements over time.
+> This application was built with [Claude Code](https://claude.ai/claude-code) (Anthropic's AI coding assistant).
 
 ---
-
-Made with love for the Balkan community
 
 <p align="center">
-  <strong>Star this repo if you find it useful!</strong>
+  Made with love for the Balkan community
 </p>
