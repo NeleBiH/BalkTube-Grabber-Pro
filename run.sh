@@ -34,11 +34,33 @@ if [[ -f "$SCRIPT_DIR/BalkGrab.py" ]]; then
     if [[ -d "$SCRIPT_DIR/.venv" ]]; then
         run_app "$SCRIPT_DIR" "$@"
     else
-        echo "Virtual environment not found in project directory."
-        echo "Creating virtual environment..."
+        echo "Virtual environment not found. Setting up..."
+
+        # Check for python3 and venv
+        if ! command -v python3 &>/dev/null; then
+            echo "ERROR: python3 not found! Please install Python 3.9+ or run ./setup.sh"
+            exit 1
+        fi
+        if ! python3 -c "import venv" 2>/dev/null; then
+            echo "ERROR: python3-venv not available!"
+            echo "Install it with:"
+            echo "  sudo apt install python3-venv    # Debian/Ubuntu/Mint"
+            echo "  sudo pacman -S python             # Arch/Manjaro"
+            echo "  sudo dnf install python3           # Fedora"
+            echo "Or run ./setup.sh which handles this automatically."
+            exit 1
+        fi
+
         python3 -m venv "$SCRIPT_DIR/.venv"
+        echo "Installing dependencies..."
+        "$SCRIPT_DIR/.venv/bin/pip" install --quiet --upgrade pip
         "$SCRIPT_DIR/.venv/bin/pip" install --quiet PySide6 yt-dlp requests Pillow
         "$SCRIPT_DIR/.venv/bin/pip" install --quiet --upgrade --pre yt-dlp
+        # Install deno if not present (needed for YouTube signature solving)
+        if [[ ! -f "$HOME/.deno/bin/deno" ]]; then
+            echo "Installing deno..."
+            curl -fsSL https://deno.land/install.sh | sh > /dev/null 2>&1 || true
+        fi
         run_app "$SCRIPT_DIR" "$@"
     fi
 fi
@@ -50,5 +72,5 @@ echo "Searched locations:"
 echo "  - $INSTALL_DIR (installed)"
 echo "  - $SCRIPT_DIR (project)"
 echo ""
-echo "Please run install.sh first or make sure you're in the project directory."
+echo "Please run ./setup.sh first or make sure you're in the project directory."
 exit 1

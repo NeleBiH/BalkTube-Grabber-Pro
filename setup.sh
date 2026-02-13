@@ -90,6 +90,74 @@ cleanup_old_versions() {
     fi
 }
 
+install_system_deps() {
+    # Detect package manager and install required system packages
+    if command -v pacman &>/dev/null; then
+        # Arch / Manjaro / CachyOS / EndeavourOS
+        echo "  Detected: Arch-based distro"
+        local pkgs=()
+        command -v python3 &>/dev/null || pkgs+=(python)
+        command -v ffmpeg &>/dev/null || pkgs+=(ffmpeg)
+        python3 -c "import venv" 2>/dev/null || pkgs+=(python)
+        if [[ ${#pkgs[@]} -gt 0 ]]; then
+            echo "  Installing: ${pkgs[*]}"
+            sudo pacman -S --needed --noconfirm "${pkgs[@]}"
+        fi
+    elif command -v apt &>/dev/null; then
+        # Ubuntu / Debian / Mint / Pop!_OS
+        echo "  Detected: Debian-based distro"
+        local pkgs=()
+        command -v python3 &>/dev/null || pkgs+=(python3)
+        command -v ffmpeg &>/dev/null || pkgs+=(ffmpeg)
+        python3 -c "import venv" 2>/dev/null || pkgs+=(python3-venv)
+        if [[ ${#pkgs[@]} -gt 0 ]]; then
+            echo "  Installing: ${pkgs[*]}"
+            sudo apt install -y "${pkgs[@]}"
+        fi
+    elif command -v dnf &>/dev/null; then
+        # Fedora / RHEL / CentOS
+        echo "  Detected: Fedora-based distro"
+        local pkgs=()
+        command -v python3 &>/dev/null || pkgs+=(python3)
+        command -v ffmpeg &>/dev/null || pkgs+=(ffmpeg-free)
+        python3 -c "import venv" 2>/dev/null || pkgs+=(python3)
+        if [[ ${#pkgs[@]} -gt 0 ]]; then
+            echo "  Installing: ${pkgs[*]}"
+            sudo dnf install -y "${pkgs[@]}"
+        fi
+    elif command -v zypper &>/dev/null; then
+        # openSUSE
+        echo "  Detected: openSUSE"
+        local pkgs=()
+        command -v python3 &>/dev/null || pkgs+=(python3)
+        command -v ffmpeg &>/dev/null || pkgs+=(ffmpeg)
+        python3 -c "import venv" 2>/dev/null || pkgs+=(python3-venv)
+        if [[ ${#pkgs[@]} -gt 0 ]]; then
+            echo "  Installing: ${pkgs[*]}"
+            sudo zypper install -y "${pkgs[@]}"
+        fi
+    else
+        echo "  Could not detect package manager."
+        echo "  Please manually install: python3, python3-venv, ffmpeg"
+        # Check if essentials are available anyway
+        if ! command -v python3 &>/dev/null; then
+            echo "  ERROR: python3 not found! Cannot continue."
+            exit 1
+        fi
+    fi
+
+    # Final check
+    if ! command -v python3 &>/dev/null; then
+        echo "  ERROR: python3 still not found after install attempt!"
+        exit 1
+    fi
+    if ! python3 -c "import venv" 2>/dev/null; then
+        echo "  ERROR: python3-venv not available! Please install it manually."
+        exit 1
+    fi
+    echo "  All system dependencies OK"
+}
+
 do_install() {
     echo ""
     echo "=========================================="
@@ -105,38 +173,42 @@ do_install() {
     fi
 
     # Clean up old versions first
-    echo "[1/7] Cleaning up old versions..."
+    echo "[1/8] Cleaning up old versions..."
     cleanup_old_versions
 
+    # Detect distro and install system dependencies
+    echo "[2/8] Checking system dependencies..."
+    install_system_deps
+
     # Create install directory
-    echo "[2/7] Creating install directory..."
+    echo "[3/8] Creating install directory..."
     mkdir -p "$INSTALL_DIR"
 
     # Copy program files
-    echo "[3/7] Copying program files..."
+    echo "[4/8] Copying program files..."
     cp "$SCRIPT_DIR/BalkGrab.py" "$INSTALL_DIR/"
     cp -r "$SCRIPT_DIR/Icons" "$INSTALL_DIR/"
 
     # Create or reuse virtual environment
-    echo "[4/7] Setting up Python environment..."
+    echo "[5/8] Setting up Python environment..."
     if [[ ! -d "$INSTALL_DIR/.venv" ]]; then
         python3 -m venv "$INSTALL_DIR/.venv"
     fi
 
     # Install/update dependencies
-    echo "[5/7] Installing dependencies..."
+    echo "[6/8] Installing Python dependencies..."
     "$INSTALL_DIR/.venv/bin/pip" install --quiet --upgrade pip
     "$INSTALL_DIR/.venv/bin/pip" install --quiet PySide6 yt-dlp requests Pillow
     "$INSTALL_DIR/.venv/bin/pip" install --quiet --upgrade --pre yt-dlp
 
     # Install deno if not present
     if [[ ! -f "$HOME/.deno/bin/deno" ]]; then
-        echo "[5.5/7] Installing deno (for YouTube signature solving)..."
+        echo "[6.5/8] Installing deno (for YouTube signature solving)..."
         curl -fsSL https://deno.land/install.sh | sh > /dev/null 2>&1 || true
     fi
 
     # Install icons
-    echo "[6/7] Installing icons..."
+    echo "[7/8] Installing icons..."
     for size in 16 32 48 64 128 256; do
         icon_dir="$ICON_DIR/${size}x${size}/apps"
         mkdir -p "$icon_dir"
@@ -147,7 +219,7 @@ do_install() {
     gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
 
     # Create desktop entry
-    echo "[7/7] Creating menu entry..."
+    echo "[8/8] Creating menu entry..."
     mkdir -p "$(dirname "$DESKTOP_FILE")"
     cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
