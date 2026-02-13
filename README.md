@@ -25,11 +25,11 @@
 
 | Search & Preview | Downloads |
 |:---:|:---:|
-| ![Search](Screenshots/search.png) | ![Downloads](Screenshots/downloads.png) |
+| ![Search](https://github.com/NeleBiH/BalkGrab/releases/download/v0.1.2/search.png) | ![Downloads](https://github.com/NeleBiH/BalkGrab/releases/download/v0.1.2/downloads.png) |
 
 | Settings | About |
 |:---:|:---:|
-| ![Settings](Screenshots/settings.png) | ![About](Screenshots/about.png) |
+| ![Settings](https://github.com/NeleBiH/BalkGrab/releases/download/v0.1.2/settings.png) | ![About](https://github.com/NeleBiH/BalkGrab/releases/download/v0.1.2/about.png) |
 
 ---
 
