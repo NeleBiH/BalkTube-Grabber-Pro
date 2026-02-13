@@ -131,6 +131,24 @@ Choose **2) Uninstall** from the menu. This removes the program, icons, menu ent
 
 ---
 
+## Settings
+
+Access settings via the **Settings** tab.
+
+| Setting | Description |
+|---------|-------------|
+| **Language** | Switch between English, Deutsch, Hrvatski/Srpski. Requires restart. |
+| **Show system tray icon** | Display BalkGrab icon in the system tray |
+| **Minimize to system tray** | Minimize to tray instead of closing |
+| **Start minimized** | Launch the app minimized to tray |
+| **Show download notifications** | Desktop notifications when downloads complete |
+| **Download location** | Choose where files are saved (default: `~/Downloads`) |
+| **Simultaneous downloads** | Number of parallel downloads (1-5) |
+| **Auto-play after download** | Automatically play files after download completes |
+| **Video player** | Set default external player for video files (VLC, MPV, etc.) |
+
+---
+
 ## Known Bugs
 
 - **Stop button stays active after closing video player** - After an external video player (VLC, MPV) is closed, the Stop button remains in active state instead of reverting to Play. **Workaround:** Press the Stop button manually to reset it.
