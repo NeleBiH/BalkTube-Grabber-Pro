@@ -40,6 +40,9 @@ pasted*.png
 *.rpm
 build-standalone/
 
+# Screenshot source files
+Novi screenshoti/
+
 # Local dev files
 zadnji prompt
 moguce ideje za buducnost.md
