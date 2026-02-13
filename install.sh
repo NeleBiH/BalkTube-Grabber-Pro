@@ -1,11 +1,11 @@
 #!/bin/bash
-# BalkTube Grabber - Install Script
+# BalkGrab - Install Script
 
 set -e
 
-APP_NAME="BalkTube Grabber"
-INSTALL_DIR="$HOME/.balktube"
-DESKTOP_FILE="$HOME/.local/share/applications/balktube.desktop"
+APP_NAME="BalkGrab"
+INSTALL_DIR="$HOME/.balkgrab"
+DESKTOP_FILE="$HOME/.local/share/applications/balkgrab.desktop"
 ICON_DIR="$HOME/.local/share/icons/hicolor"
 
 echo "=========================================="
@@ -16,8 +16,8 @@ echo "=========================================="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check if running from project directory
-if [[ ! -f "$SCRIPT_DIR/BalkTube Grabber.py" ]]; then
-    echo "Error: BalkTube Grabber.py not found in $SCRIPT_DIR"
+if [[ ! -f "$SCRIPT_DIR/BalkGrab.py" ]]; then
+    echo "Error: BalkGrab.py not found in $SCRIPT_DIR"
     echo "Please run this script from the project directory."
     exit 1
 fi
@@ -28,7 +28,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Copy program files
 echo "[2/6] Copying program files..."
-cp "$SCRIPT_DIR/BalkTube Grabber.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/BalkGrab.py" "$INSTALL_DIR/"
 cp -r "$SCRIPT_DIR/Icons" "$INSTALL_DIR/"
 
 # Create virtual environment if it doesn't exist
@@ -57,7 +57,7 @@ for size in 16 32 48 64 128 256; do
     icon_dir="$ICON_DIR/${size}x${size}/apps"
     mkdir -p "$icon_dir"
     if [[ -f "$INSTALL_DIR/Icons/icon_${size}x${size}.png" ]]; then
-        cp "$INSTALL_DIR/Icons/icon_${size}x${size}.png" "$icon_dir/balktube.png"
+        cp "$INSTALL_DIR/Icons/icon_${size}x${size}.png" "$icon_dir/balkgrab.png"
     fi
 done
 
@@ -71,15 +71,15 @@ cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=BalkTube Grabber
+Name=BalkGrab
 GenericName=YouTube Downloader
 Comment=Download videos and music from YouTube
-Exec=$INSTALL_DIR/.venv/bin/python "$INSTALL_DIR/BalkTube Grabber.py"
-Icon=balktube
+Exec=$INSTALL_DIR/.venv/bin/python "$INSTALL_DIR/BalkGrab.py"
+Icon=balkgrab
 Terminal=false
 Categories=AudioVideo;Audio;Video;Network;
 Keywords=youtube;download;music;video;mp3;
-StartupWMClass=balktube
+StartupWMClass=balkgrab
 EOF
 
 # Make desktop file executable
@@ -97,7 +97,7 @@ echo "Installed to: $INSTALL_DIR"
 echo ""
 echo "You can now:"
 echo "  - Find '$APP_NAME' in your application menu"
-echo "  - Run from terminal: $INSTALL_DIR/.venv/bin/python \"$INSTALL_DIR/BalkTube Grabber.py\""
+echo "  - Run from terminal: $INSTALL_DIR/.venv/bin/python \"$INSTALL_DIR/BalkGrab.py\""
 echo ""
 echo "To uninstall, run: ./uninstall.sh"
 echo ""

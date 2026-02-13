@@ -1,14 +1,14 @@
 #!/bin/bash
-# BalkTube Grabber - Debian/Ubuntu/Mint .deb Package Builder
+# BalkGrab - Debian/Ubuntu/Mint .deb Package Builder
 # NOT TESTED - nemam na cemu da testiram dok ne odradim install Minta
 
 set -e
 
-APP_NAME="balktube-grabber"
+APP_NAME="balkgrab"
 APP_VERSION="0.1.2"
 ARCH="amd64"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="/tmp/balktube-debbuild"
+BUILD_DIR="/tmp/balkgrab-debbuild"
 PKG_NAME="${APP_NAME}_${APP_VERSION}_${ARCH}"
 PKG_DIR="${BUILD_DIR}/${PKG_NAME}"
 
@@ -47,10 +47,10 @@ Priority: optional
 Architecture: ${ARCH}
 Depends: python3 (>= 3.9), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtmultimedia, yt-dlp, python3-requests, ffmpeg
 Recommends: deno
-Maintainer: BalkTube Team <nele@balktube.dev>
-Homepage: https://github.com/NeleBiH/BalkTube-Grabber
+Maintainer: BalkGrab Team <nele@balkgrab.dev>
+Homepage: https://github.com/NeleBiH/BalkGrab
 Description: YouTube downloader with GUI - ClipGrab alternative
- BalkTube Grabber is a free, open-source YouTube downloader
+ BalkGrab is a free, open-source YouTube downloader
  inspired by ClipGrab. Download videos in various resolutions or
  convert them to audio formats like MP3, FLAC, and more.
  .
@@ -66,7 +66,7 @@ Description: YouTube downloader with GUI - ClipGrab alternative
 EOF
 
 echo "[3/5] Copying application files..."
-cp "$SCRIPT_DIR/BalkTube Grabber.py" "$PKG_DIR/usr/share/$APP_NAME/"
+cp "$SCRIPT_DIR/BalkGrab.py" "$PKG_DIR/usr/share/$APP_NAME/"
 cp "$SCRIPT_DIR/Icons/"*.png "$PKG_DIR/usr/share/$APP_NAME/Icons/"
 cp "$SCRIPT_DIR/Icons/icon.ico" "$PKG_DIR/usr/share/$APP_NAME/Icons/" 2>/dev/null || true
 cp "$SCRIPT_DIR/LICENSE" "$PKG_DIR/usr/share/$APP_NAME/" 2>/dev/null || true
@@ -82,7 +82,7 @@ done
 # Create launcher script
 cat > "$PKG_DIR/usr/bin/$APP_NAME" << 'LAUNCHER'
 #!/bin/bash
-exec python3 /usr/share/balktube-grabber/BalkTube\ Grabber\ Pro.py "$@"
+exec python3 /usr/share/balkgrab/BalkGrab.py "$@"
 LAUNCHER
 chmod 755 "$PKG_DIR/usr/bin/$APP_NAME"
 
@@ -91,7 +91,7 @@ cat > "$PKG_DIR/usr/share/applications/${APP_NAME}.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=BalkTube Grabber
+Name=BalkGrab
 GenericName=YouTube Downloader
 Comment=Download videos and music from YouTube
 Exec=${APP_NAME}
@@ -99,7 +99,7 @@ Icon=${APP_NAME}
 Terminal=false
 Categories=AudioVideo;Audio;Video;Network;
 Keywords=youtube;download;music;video;mp3;
-StartupWMClass=balktube
+StartupWMClass=balkgrab
 EOF
 
 echo "[4/5] Creating postinst/postrm scripts..."

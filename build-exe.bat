@@ -1,9 +1,9 @@
 @echo off
-REM BalkTube Grabber - Windows EXE Build Script
+REM BalkGrab - Windows EXE Build Script
 REM Run this on Windows to create a standalone .exe
 
 echo ==========================================
-echo   Building BalkTube Grabber for Windows
+echo   Building BalkGrab for Windows
 echo ==========================================
 echo.
 
@@ -27,7 +27,7 @@ echo [2/4] Creating build configuration...
 echo # -*- mode: python ; coding: utf-8 -*-
 echo.
 echo a = Analysis(
-echo     ['BalkTube Grabber.py'],
+echo     ['BalkGrab.py'],
 echo     pathex=[],
 echo     binaries=[],
 echo     datas=[('Icons', 'Icons')],
@@ -47,7 +47,7 @@ echo     a.scripts,
 echo     a.binaries,
 echo     a.datas,
 echo     [],
-echo     name='BalkTube Grabber',
+echo     name='BalkGrab',
 echo     debug=False,
 echo     bootloader_ignore_signals=False,
 echo     strip=False,
@@ -62,26 +62,26 @@ echo     codesign_identity=None,
 echo     entitlements_file=None,
 echo     icon='Icons\\icon.ico',
 echo ^)
-) > balktube.spec
+) > balkgrab.spec
 
 REM Build exe
 echo [3/4] Building executable (this may take a few minutes)...
-pyinstaller --clean --noconfirm balktube.spec
+pyinstaller --clean --noconfirm balkgrab.spec
 
 REM Check result
-if exist "dist\BalkTube Grabber.exe" (
+if exist "dist\BalkGrab.exe" (
     echo.
     echo ==========================================
     echo   Build successful!
     echo ==========================================
     echo.
-    echo Output: dist\BalkTube Grabber.exe
+    echo Output: dist\BalkGrab.exe
     echo.
     echo [4/4] Cleaning up...
     rmdir /s /q build 2>nul
-    del balktube.spec 2>nul
+    del balkgrab.spec 2>nul
     echo.
-    echo You can now run: "dist\BalkTube Grabber.exe"
+    echo You can now run: "dist\BalkGrab.exe"
     echo.
     echo NOTE: Make sure FFmpeg is installed and in PATH for audio conversion.
     echo Download FFmpeg: https://ffmpeg.org/download.html

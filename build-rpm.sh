@@ -1,13 +1,13 @@
 #!/bin/bash
-# BalkTube Grabber - Fedora/RHEL/openSUSE .rpm Package Builder
+# BalkGrab - Fedora/RHEL/openSUSE .rpm Package Builder
 # NOT TESTED - nemam na cemu da testiram dok ne odradim install Fedore
 
 set -e
 
-APP_NAME="balktube-grabber"
+APP_NAME="balkgrab"
 APP_VERSION="0.1.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RPMBUILD_DIR="/tmp/balktube-rpmbuild"
+RPMBUILD_DIR="/tmp/balkgrab-rpmbuild"
 
 echo "=========================================="
 echo "  Building ${APP_NAME} .rpm package"
@@ -31,7 +31,7 @@ mkdir -p "$RPMBUILD_DIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 echo "[2/4] Creating source tarball..."
 TARBALL_DIR="${APP_NAME}-${APP_VERSION}"
 mkdir -p "/tmp/$TARBALL_DIR/Icons"
-cp "$SCRIPT_DIR/BalkTube Grabber.py" "/tmp/$TARBALL_DIR/"
+cp "$SCRIPT_DIR/BalkGrab.py" "/tmp/$TARBALL_DIR/"
 cp "$SCRIPT_DIR/Icons/"*.png "/tmp/$TARBALL_DIR/Icons/"
 cp "$SCRIPT_DIR/Icons/icon.ico" "/tmp/$TARBALL_DIR/Icons/" 2>/dev/null || true
 cp "$SCRIPT_DIR/LICENSE" "/tmp/$TARBALL_DIR/" 2>/dev/null || true
@@ -41,12 +41,12 @@ rm -rf "/tmp/$TARBALL_DIR"
 
 echo "[3/4] Creating spec file..."
 cat > "$RPMBUILD_DIR/SPECS/${APP_NAME}.spec" << 'SPEC'
-Name:           balktube-grabber
+Name:           balkgrab
 Version:        0.1.2
 Release:        1%{?dist}
 Summary:        YouTube downloader with GUI - ClipGrab alternative
 License:        MIT
-URL:            https://github.com/NeleBiH/BalkTube-Grabber
+URL:            https://github.com/NeleBiH/BalkGrab
 Source0:        %{name}-%{version}.tar.gz
 
 BuildArch:      noarch
@@ -61,7 +61,7 @@ Requires:       ffmpeg-free
 Recommends:     deno
 
 %description
-BalkTube Grabber is a free, open-source YouTube downloader
+BalkGrab is a free, open-source YouTube downloader
 inspired by ClipGrab. Download videos in various resolutions or
 convert them to audio formats like MP3, FLAC, and more.
 
@@ -84,7 +84,7 @@ rm -rf %{buildroot}
 # Application files
 mkdir -p "%{buildroot}/usr/share/%{name}"
 mkdir -p "%{buildroot}/usr/share/%{name}/Icons"
-cp "BalkTube Grabber.py" "%{buildroot}/usr/share/%{name}/"
+cp "BalkGrab.py" "%{buildroot}/usr/share/%{name}/"
 cp Icons/*.png "%{buildroot}/usr/share/%{name}/Icons/"
 cp Icons/icon.ico "%{buildroot}/usr/share/%{name}/Icons/" 2>/dev/null || true
 cp LICENSE "%{buildroot}/usr/share/%{name}/" 2>/dev/null || true
@@ -93,7 +93,7 @@ cp LICENSE "%{buildroot}/usr/share/%{name}/" 2>/dev/null || true
 mkdir -p "%{buildroot}/usr/bin"
 cat > "%{buildroot}/usr/bin/%{name}" << 'LAUNCHER'
 #!/bin/bash
-exec python3 /usr/share/balktube-grabber/BalkTube\ Grabber\ Pro.py "$@"
+exec python3 /usr/share/balkgrab/BalkGrab.py "$@"
 LAUNCHER
 chmod 755 "%{buildroot}/usr/bin/%{name}"
 
@@ -103,15 +103,15 @@ cat > "%{buildroot}/usr/share/applications/%{name}.desktop" << 'DESKTOP'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=BalkTube Grabber
+Name=BalkGrab
 GenericName=YouTube Downloader
 Comment=Download videos and music from YouTube
-Exec=balktube-grabber
-Icon=balktube-grabber
+Exec=balkgrab
+Icon=balkgrab
 Terminal=false
 Categories=AudioVideo;Audio;Video;Network;
 Keywords=youtube;download;music;video;mp3;
-StartupWMClass=balktube
+StartupWMClass=balkgrab
 DESKTOP
 
 # Icons
@@ -138,7 +138,7 @@ gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
 update-desktop-database /usr/share/applications 2>/dev/null || true
 
 %changelog
-* Tue Feb 11 2025 BalkTube Team <nele@balktube.dev> - 0.1.2-1
+* Tue Feb 11 2025 BalkGrab Team <nele@balkgrab.dev> - 0.1.2-1
 - Fix bare except clauses
 - Fix QMediaPlayer.StoppedState deprecation
 - Add proper .ico icon for Windows builds

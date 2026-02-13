@@ -1,10 +1,10 @@
-# BalkTube Grabber - Windows EXE Build Script (PowerShell)
+# BalkGrab - Windows EXE Build Script (PowerShell)
 # Run: powershell -ExecutionPolicy Bypass -File build-exe.ps1
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  Building BalkTube Grabber for Windows" -ForegroundColor Cyan
+Write-Host "  Building BalkGrab for Windows" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -30,7 +30,7 @@ Write-Host "[2/4] Building executable (this may take a few minutes)..." -Foregro
 $pyinstallerArgs = @(
     "--onefile",
     "--windowed",
-    "--name=BalkTube Grabber",
+    "--name=BalkGrab",
     "--icon=Icons\icon.ico",
     "--add-data=Icons;Icons",
     "--hidden-import=PySide6.QtCore",
@@ -39,13 +39,13 @@ $pyinstallerArgs = @(
     "--hidden-import=PySide6.QtMultimedia",
     "--clean",
     "--noconfirm",
-    "BalkTube Grabber.py"
+    "BalkGrab.py"
 )
 
 pyinstaller @pyinstallerArgs
 
 # Check result
-$exePath = "dist\BalkTube Grabber.exe"
+$exePath = "dist\BalkGrab.exe"
 if (Test-Path $exePath) {
     Write-Host ""
     Write-Host "==========================================" -ForegroundColor Green

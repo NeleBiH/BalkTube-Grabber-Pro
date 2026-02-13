@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="Icons/icon_256x256.png" alt="BalkTube Logo" width="128"/>
+  <img src="Icons/icon_256x256.png" alt="BalkGrab Logo" width="128"/>
 </p>
 
-<h1 align="center">BalkTube Grabber</h1>
+<h1 align="center">BalkGrab</h1>
 
 <p align="center">
   <strong>Free & Open Source YouTube Downloader</strong><br>
@@ -77,28 +77,28 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/NeleBiH/BalkTube-Grabber.git
-cd BalkTube-Grabber
+git clone https://github.com/NeleBiH/BalkGrab.git
+cd BalkGrab
 
 # Run the installer
 ./install.sh
 ```
 
 The installer will:
-- Install the program to `~/.balktube/`
+- Install the program to `~/.balkgrab/`
 - Set up a Python virtual environment with all dependencies
 - Install icons to your system
 - Create a menu entry (works with KDE, GNOME, XFCE, etc.)
 - Install [deno](https://deno.land/) for YouTube signature solving
 
-After installation, find **BalkTube Grabber** in your application menu!
+After installation, find **BalkGrab** in your application menu!
 
 ### Method 2: Run Without Installing (Linux)
 
 ```bash
 # Clone the repository
-git clone https://github.com/NeleBiH/BalkTube-Grabber.git
-cd BalkTube-Grabber
+git clone https://github.com/NeleBiH/BalkGrab.git
+cd BalkGrab
 
 # Run directly (auto-creates venv on first run)
 ./run.sh
@@ -111,8 +111,8 @@ cd BalkTube-Grabber
 ./build-appimage-standalone.sh
 
 # Run the AppImage (no installation needed!)
-chmod +x BalkTube_Grabber-0.1.2-x86_64.AppImage
-./BalkTube_Grabber-0.1.2-x86_64.AppImage
+chmod +x BalkGrab-0.1.2-x86_64.AppImage
+./BalkGrab-0.1.2-x86_64.AppImage
 ```
 
 **Note:** The AppImage is fully portable (~260MB) - no Python or dependencies needed!
@@ -136,7 +136,7 @@ pip install PySide6 yt-dlp requests
 pip install --upgrade --pre yt-dlp
 
 # Run
-python "BalkTube Grabber.py"
+python "BalkGrab.py"
 ```
 
 ### Method 5: Windows Standalone EXE
@@ -148,7 +148,7 @@ python "BalkTube Grabber.py"
 # Option B: PowerShell version
 powershell -ExecutionPolicy Bypass -File build-exe.ps1
 
-# The exe will be in: dist\BalkTube Grabber.exe
+# The exe will be in: dist\BalkGrab.exe
 ```
 
 ### Method 6: Windows Manual Run
@@ -160,7 +160,7 @@ pip install PySide6 yt-dlp requests
 # Download FFmpeg from https://ffmpeg.org and add to PATH
 
 # Run
-python "BalkTube Grabber.py"
+python "BalkGrab.py"
 ```
 
 ---
@@ -201,13 +201,13 @@ Download from https://ffmpeg.org/download.html and add to PATH.
 ```
 
 This will:
-- Remove the program from `~/.balktube/`
+- Remove the program from `~/.balkgrab/`
 - Remove icons from your system
 - Remove the menu entry
 
-**Note:** User settings in `~/.config/BalkTube` are preserved. To remove them too:
+**Note:** User settings in `~/.config/BalkGrab` are preserved. To remove them too:
 ```bash
-rm -rf ~/.config/BalkTube
+rm -rf ~/.config/BalkGrab
 ```
 
 ---

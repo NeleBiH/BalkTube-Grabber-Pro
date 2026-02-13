@@ -1,5 +1,5 @@
 """
-🎵 BalkTube Grabber v2.0 - ClipGrab klon kako treba! 🎵
+🎵 BalkGrab v2.0 - ClipGrab klon kako treba! 🎵
 - PySide6 GUI sa tabovima
 - Pretraga YouTube videa
 - Download manager sa napretkom
@@ -55,7 +55,7 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     datefmt='%H:%M:%S'
 )
-log = logging.getLogger("BalkTube")
+log = logging.getLogger("BalkGrab")
 
 # ============ APP DIRECTORY ============
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -88,12 +88,12 @@ class ClickableSlider(QSlider):
 
 # ============ VERSION INFO ============
 APP_VERSION = "0.1.2"
-APP_NAME = "BalkTube Grabber"
+APP_NAME = "BalkGrab"
 
 # ============ TRANSLATIONS ============
 TRANSLATIONS = {
     'en': {
-        'app_title': '🎵 BalkTube Grabber',
+        'app_title': '🎵 BalkGrab',
         'tab_search': '🔍 Search',
         'tab_downloads': '⬇️ Downloads',
         'tab_settings': '⚙️ Settings',
@@ -150,13 +150,13 @@ TRANSLATIONS = {
         'save_settings': '💾 Save Settings',
         'settings_saved': 'Settings saved! ✅',
         # About
-        'about_title': 'About BalkTube Grabber',
+        'about_title': 'About BalkGrab',
         'about_description': '''
-<h2>🎵 BalkTube Grabber</h2>
+<h2>🎵 BalkGrab</h2>
 <p><b>Version:</b> {version}</p>
 
 <h3>What is this?</h3>
-<p>BalkTube Grabber is a free, open-source YouTube downloader inspired by ClipGrab.
+<p>BalkGrab is a free, open-source YouTube downloader inspired by ClipGrab.
 Download videos in various resolutions or convert them to audio formats like MP3, FLAC, and more!</p>
 
 <h3>Features</h3>
@@ -181,7 +181,7 @@ Download videos in various resolutions or convert them to audio formats like MP3
         'license_title': '📜 License',
         'license_text': '''
 <h3>MIT License</h3>
-<p>Copyright (c) 2024-2026 BalkTube Team</p>
+<p>Copyright (c) 2024-2026 BalkGrab Team</p>
 
 <p>Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -211,7 +211,7 @@ copies or substantial portions of the Software.</p>
         'footer': 'Made with ❤️,Claude code and some coffee | Balkan Edition 🇧🇦🇭🇷🇷🇸'
     },
     'de': {
-        'app_title': '🎵 BalkTube Grabber',
+        'app_title': '🎵 BalkGrab',
         'tab_search': '🔍 Suchen',
         'tab_downloads': '⬇️ Downloads',
         'tab_settings': '⚙️ Einstellungen',
@@ -264,13 +264,13 @@ copies or substantial portions of the Software.</p>
         'download_location': 'Download-Speicherort:',
         'save_settings': '💾 Einstellungen speichern',
         'settings_saved': 'Einstellungen gespeichert! ✅',
-        'about_title': 'Über BalkTube Grabber',
+        'about_title': 'Über BalkGrab',
         'about_description': '''
-<h2>🎵 BalkTube Grabber</h2>
+<h2>🎵 BalkGrab</h2>
 <p><b>Version:</b> {version}</p>
 
 <h3>Was ist das?</h3>
-<p>BalkTube Grabber ist ein kostenloser, Open-Source YouTube-Downloader inspiriert von ClipGrab.
+<p>BalkGrab ist ein kostenloser, Open-Source YouTube-Downloader inspiriert von ClipGrab.
 Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie sie in Audioformate wie MP3, FLAC und mehr!</p>
 
 <h3>Funktionen</h3>
@@ -292,7 +292,7 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'footer': 'Mit ❤️ und etwas Ćevapi gemacht | Balkan Edition 🇧🇦🇭🇷🇷🇸'
     },
     'hr': {
-        'app_title': '🎵 BalkTube Grabber',
+        'app_title': '🎵 BalkGrab',
         'tab_search': '🔍 Traži',
         'tab_downloads': '⬇️ Preuzimanja',
         'tab_settings': '⚙️ Postavke',
@@ -345,13 +345,13 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'download_location': 'Lokacija preuzimanja:',
         'save_settings': '💾 Spremi postavke',
         'settings_saved': 'Postavke spremljene! ✅',
-        'about_title': 'O aplikaciji BalkTube Grabber',
+        'about_title': 'O aplikaciji BalkGrab',
         'about_description': '''
-<h2>🎵 BalkTube Grabber</h2>
+<h2>🎵 BalkGrab</h2>
 <p><b>Verzija:</b> {version}</p>
 
 <h3>Šta je ovo?</h3>
-<p>BalkTube Grabber je besplatan YouTube downloader otvorenog koda inspiriran ClipGrab-om.
+<p>BalkGrab je besplatan YouTube downloader otvorenog koda inspiriran ClipGrab-om.
 Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC i druge!</p>
 
 <h3>Mogućnosti</h3>
@@ -369,7 +369,7 @@ Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC
         'license_title': '📜 Licenca',
         'license_text': '''
 <h3>MIT Licenca</h3>
-<p>Copyright (c) 2024-2026 BalkTube Tim</p>
+<p>Copyright (c) 2024-2026 BalkGrab Tim</p>
 
 <p>Ovim se daje dozvola, besplatno, svakoj osobi koja dobije kopiju
 ovog softvera i pripadajuće dokumentacije ("Softver"), da koristi
@@ -710,14 +710,14 @@ class VideoItemWidget(QWidget):
 
 
 # ============ MAIN WINDOW ============
-class BalkTubeGrabber(QMainWindow):
+class BalkGrabGrabber(QMainWindow):
     """Glavni prozor aplikacije"""
 
     def __init__(self):
         super().__init__()
 
         # Settings
-        self.settings = QSettings("BalkTube", "Grabber")
+        self.settings = QSettings("BalkGrab", "BalkGrab")
         self.current_language = self.settings.value("language", "hr")
         self.tr = TRANSLATIONS[self.current_language]
 
@@ -731,7 +731,7 @@ class BalkTubeGrabber(QMainWindow):
             self.setWindowIcon(QIcon(icon_path))
 
         # Downloads history file
-        self.downloads_file = os.path.expanduser("~/.config/BalkTube/downloads.json")
+        self.downloads_file = os.path.expanduser("~/.config/BalkGrab/downloads.json")
         os.makedirs(os.path.dirname(self.downloads_file), exist_ok=True)
 
         # Variables
@@ -1591,12 +1591,12 @@ class BalkTubeGrabber(QMainWindow):
 
         github_btn = QPushButton(self.get_text('github'))
         github_btn.setObjectName("secondaryBtn")
-        github_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/NeleBiH/BalkTube-Grabber/")))
+        github_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/NeleBiH/BalkGrab/")))
         links_layout.addWidget(github_btn)
 
         bug_btn = QPushButton(self.get_text('report_bug'))
         bug_btn.setObjectName("secondaryBtn")
-        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/NeleBiH/BalkTube-Grabber/issues")))
+        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/NeleBiH/BalkGrab/issues")))
         links_layout.addWidget(bug_btn)
 
         license_btn = QPushButton(self.get_text('license_title'))
@@ -2504,7 +2504,7 @@ class BalkTubeGrabber(QMainWindow):
 
     def load_app_config(self) -> dict:
         """Load app config from JSON"""
-        config_file = os.path.expanduser("~/.config/BalkTube/config.json")
+        config_file = os.path.expanduser("~/.config/BalkGrab/config.json")
         try:
             if os.path.exists(config_file):
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -2515,7 +2515,7 @@ class BalkTubeGrabber(QMainWindow):
 
     def save_app_config(self, config: dict):
         """Save app config to JSON"""
-        config_file = os.path.expanduser("~/.config/BalkTube/config.json")
+        config_file = os.path.expanduser("~/.config/BalkGrab/config.json")
         try:
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w', encoding='utf-8') as f:
@@ -2655,17 +2655,17 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     app.setApplicationName(APP_NAME)
-    app.setOrganizationName("BalkTube")
+    app.setOrganizationName("BalkGrab")
 
     # Set application icon
     icon_path = os.path.join(APP_DIR, "Icons", "icon_256x256.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    window = BalkTubeGrabber()
+    window = BalkGrabGrabber()
 
     # Check start minimized
-    settings = QSettings("BalkTube", "Grabber")
+    settings = QSettings("BalkGrab", "BalkGrab")
     if settings.value("start_minimized", False, type=bool):
         window.hide()
     else:

@@ -1,9 +1,9 @@
 #!/bin/bash
-# BalkTube Grabber - Uninstall Script
+# BalkGrab - Uninstall Script
 
-APP_NAME="BalkTube Grabber"
-INSTALL_DIR="$HOME/.balktube"
-DESKTOP_FILE="$HOME/.local/share/applications/balktube.desktop"
+APP_NAME="BalkGrab"
+INSTALL_DIR="$HOME/.balkgrab"
+DESKTOP_FILE="$HOME/.local/share/applications/balkgrab.desktop"
 ICON_DIR="$HOME/.local/share/icons/hicolor"
 
 echo "=========================================="
@@ -30,7 +30,7 @@ fi
 # Remove icons
 echo "[2/3] Removing icons..."
 for size in 16 32 48 64 128 256; do
-    icon_file="$ICON_DIR/${size}x${size}/apps/balktube.png"
+    icon_file="$ICON_DIR/${size}x${size}/apps/balkgrab.png"
     if [[ -f "$icon_file" ]]; then
         rm -f "$icon_file"
         echo "  Removed: $icon_file"
@@ -59,6 +59,6 @@ echo "=========================================="
 echo ""
 echo "$APP_NAME has been removed from your system."
 echo ""
-echo "Note: User settings in ~/.config/BalkTube were NOT removed."
-echo "To remove settings too, run: rm -rf ~/.config/BalkTube"
+echo "Note: User settings in ~/.config/BalkGrab were NOT removed."
+echo "To remove settings too, run: rm -rf ~/.config/BalkGrab"
 echo ""

@@ -1,10 +1,10 @@
 #!/bin/bash
-# BalkTube Grabber - Standalone AppImage Build Script
+# BalkGrab - Standalone AppImage Build Script
 # Creates a FULLY PORTABLE AppImage with Python and all dependencies bundled
 
 set -e
 
-APP_NAME="BalkTube_Grabber"
+APP_NAME="BalkGrab"
 APP_VERSION="0.1.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build-standalone"
@@ -48,30 +48,30 @@ echo "      This may take several minutes..."
 # Copy application
 echo "[5/7] Copying application files..."
 mkdir -p "$APPDIR/app"
-cp "$SCRIPT_DIR/BalkTube Grabber.py" "$APPDIR/app/"
+cp "$SCRIPT_DIR/BalkGrab.py" "$APPDIR/app/"
 cp -r "$SCRIPT_DIR/Icons" "$APPDIR/app/"
 
 # Setup icons and desktop file
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$APPDIR/usr/share/applications"
-cp "$SCRIPT_DIR/Icons/icon_256x256.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/balktube.png"
-cp "$SCRIPT_DIR/Icons/icon_256x256.png" "$APPDIR/balktube.png"
-ln -sf balktube.png "$APPDIR/.DirIcon"
+cp "$SCRIPT_DIR/Icons/icon_256x256.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/balkgrab.png"
+cp "$SCRIPT_DIR/Icons/icon_256x256.png" "$APPDIR/balkgrab.png"
+ln -sf balkgrab.png "$APPDIR/.DirIcon"
 
-cat > "$APPDIR/balktube.desktop" << 'EOF'
+cat > "$APPDIR/balkgrab.desktop" << 'EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=BalkTube Grabber
+Name=BalkGrab
 GenericName=YouTube Downloader
 Comment=Download videos and music from YouTube
 Exec=AppRun
-Icon=balktube
+Icon=balkgrab
 Terminal=false
 Categories=AudioVideo;Audio;Video;Network;
 Keywords=youtube;download;music;video;mp3;
 EOF
-cp "$APPDIR/balktube.desktop" "$APPDIR/usr/share/applications/"
+cp "$APPDIR/balkgrab.desktop" "$APPDIR/usr/share/applications/"
 
 # Create AppRun
 echo "[6/7] Creating AppRun launcher..."
@@ -99,7 +99,7 @@ export QT_QPA_PLATFORM_PLUGIN_PATH="$HERE/lib/python3.11/site-packages/PySide6/Q
 export QT_MEDIA_BACKEND="ffmpeg"
 
 # Run the application
-exec "$HERE/bin/python3" "$HERE/app/BalkTube Grabber.py" "$@"
+exec "$HERE/bin/python3" "$HERE/app/BalkGrab.py" "$@"
 APPRUN
 chmod +x "$APPDIR/AppRun"
 

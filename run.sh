@@ -1,8 +1,8 @@
 #!/bin/bash
-# BalkTube Grabber - Run Script-This will enable you to run app with no install
+# BalkGrab - Run Script-This will enable you to run app with no install
 
-APP_NAME="BalkTube Grabber"
-INSTALL_DIR="$HOME/.balktube"
+APP_NAME="BalkGrab"
+INSTALL_DIR="$HOME/.balkgrab"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Add deno to PATH if available
@@ -14,7 +14,7 @@ fi
 run_app() {
     local dir="$1"
     local venv="$dir/.venv"
-    local app="$dir/BalkTube Grabber.py"
+    local app="$dir/BalkGrab.py"
 
     if [[ -f "$app" && -d "$venv" ]]; then
         echo "Starting $APP_NAME from: $dir"
@@ -24,12 +24,12 @@ run_app() {
 }
 
 # Try installed location first
-if [[ -f "$INSTALL_DIR/BalkTube Grabber.py" ]]; then
+if [[ -f "$INSTALL_DIR/BalkGrab.py" ]]; then
     run_app "$INSTALL_DIR" "$@"
 fi
 
 # Try project directory (where this script is located)
-if [[ -f "$SCRIPT_DIR/BalkTube Grabber.py" ]]; then
+if [[ -f "$SCRIPT_DIR/BalkGrab.py" ]]; then
     # Check if venv exists in project directory
     if [[ -d "$SCRIPT_DIR/.venv" ]]; then
         run_app "$SCRIPT_DIR" "$@"
