@@ -1,17 +1,17 @@
 """
-🎵 BalkGrab v2.0 - ClipGrab klon kako treba! 🎵
-- PySide6 GUI sa tabovima
-- Pretraga YouTube videa
-- Download manager sa napretkom
-- Integrirani media player
-- System tray podrška
+🎵 BalkGrab v2.0 - ClipGrab clone done right! 🎵
+- PySide6 GUI with tabs
+- YouTube video search
+- Download manager with progress tracking
+- Integrated media player
+- System tray support
 - Multi-language (EN/DE/HR)
 
-INSTALACIJA:
+INSTALLATION:
 pip install PySide6 yt-dlp requests
 
-TAKOĐER TREBAŠ:
-ffmpeg - za audio konverziju
+ALSO REQUIRED:
+ffmpeg - for audio conversion
 """
 
 import sys
@@ -28,6 +28,7 @@ if os.path.isdir(deno_path):
     os.environ["PATH"] = deno_path + os.pathsep + os.environ.get("PATH", "")
 from pathlib import Path
 from typing import Optional, List, Dict
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -36,7 +37,8 @@ from PySide6.QtWidgets import (
     QGroupBox, QRadioButton, QButtonGroup, QFrame, QSplitter,
     QStackedWidget, QSizePolicy, QScrollArea, QTabWidget,
     QSlider, QCheckBox, QTextEdit, QSystemTrayIcon, QMenu,
-    QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QInputDialog
+    QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QInputDialog,
+    QDialog, QToolButton
 )
 from PySide6.QtCore import (
     Qt, Signal, QObject, QSize, QThread, QMetaObject, Q_ARG,
@@ -59,6 +61,7 @@ log = logging.getLogger("BalkGrab")
 
 # ============ APP DIRECTORY ============
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+ICON_DIR = "windows" if sys.platform == "win32" else "linux"
 
 
 # ============ CLICKABLE SLIDER ============
@@ -87,7 +90,7 @@ class ClickableSlider(QSlider):
         super().mouseReleaseEvent(event)
 
 # ============ VERSION INFO ============
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.3.0"
 APP_NAME = "BalkGrab"
 
 # ============ TRANSLATIONS ============
@@ -112,7 +115,9 @@ TRANSLATIONS = {
         'status': '📊 Status',
         'waiting': 'Waiting for selection... 👀',
         'download_btn': '⬇️  DOWNLOAD NOW!  ⬇️',
+        'stop_download': '⏹  STOP DOWNLOAD  ⏹',
         'found_videos': 'Found {count} videos! 🎉',
+        'load_more': '🔽 Load More Results',
         'no_results': 'No results 😢',
         'ready_download': 'Ready to download! 🚀',
         'downloading': 'Downloading... {percent:.1f}%',
@@ -131,6 +136,14 @@ TRANSLATIONS = {
         'actions': 'Actions',
         'clear_completed': '🗑️ Clear Completed',
         'open_folder': '📂 Open Folder',
+        'ctx_play': 'Play',
+        'ctx_open_folder': 'Open containing folder',
+        'ctx_download_again': 'Download again',
+        'ctx_convert_to': 'Convert to',
+        'ctx_remove': 'Remove from list',
+        'converting_file': 'Converting to {fmt}...',
+        'conversion_done': 'Converted to {fmt}',
+        'conversion_failed': 'Conversion failed: {error}',
         # Player
         'player_title': '🎵 Media Player',
         'now_playing': 'Now Playing:',
@@ -142,6 +155,7 @@ TRANSLATIONS = {
         'system_tray': 'Show system tray icon',
         'minimize_tray': 'Minimize to system tray',
         'start_minimized': 'Start minimized',
+        'continue_playing_tray': 'Continue playing when minimized to tray',
         'notifications': 'Show download notifications',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Simultaneous downloads:',
@@ -162,12 +176,15 @@ Download videos in various resolutions or convert them to audio formats like MP3
 <h3>Features</h3>
 <ul>
 <li>🔍 Search YouTube directly from the app</li>
-<li>📺 Preview videos before downloading</li>
+<li>📺 Preview videos with built-in stream player</li>
 <li>🎬 Download videos in resolutions from 240p to 4K</li>
 <li>🎵 Convert to audio: MP3, AAC, FLAC, WAV, OGG</li>
 <li>⬇️ Download manager with progress tracking</li>
-<li>🎧 Built-in media player</li>
-<li>🌍 Multi-language support</li>
+<li>🎧 Built-in media player for downloaded files</li>
+<li>📋 Smart playlist detection with batch download</li>
+<li>📎 Clipboard auto-detection of YouTube URLs</li>
+<li>🍪 Browser cookies support for age-restricted videos</li>
+<li>🌍 Multi-language: English, Deutsch, Hrvatski/Srpski</li>
 <li>🖥️ System tray integration</li>
 </ul>
 
@@ -208,6 +225,16 @@ copies or substantial portions of the Software.</p>
         'links_title': '🔗 Links',
         'github': '⭐ GitHub Repository',
         'report_bug': '🐛 Report a Bug',
+        # Playlist
+        'playlist_detected': 'Playlist Detected',
+        'playlist_msg': 'This playlist contains {count} videos.\nWhat would you like to do?',
+        'playlist_first_video': 'Show First Video',
+        'playlist_load_first': 'First {count} videos',
+        'playlist_load_all': 'All {count} videos',
+        'playlist_load_btn': 'Load Playlist',
+        'playlist_loading': 'Loading playlist info...',
+        'playlist_warning': 'Loading many videos may be slow!',
+        'playlist_cancel': 'Cancel',
         'footer': 'Made with ❤️,Claude code and some coffee | Balkan Edition 🇧🇦🇭🇷🇷🇸'
     },
     'de': {
@@ -230,7 +257,9 @@ copies or substantial portions of the Software.</p>
         'status': '📊 Status',
         'waiting': 'Warte auf Auswahl... 👀',
         'download_btn': '⬇️  JETZT HERUNTERLADEN!  ⬇️',
+        'stop_download': '⏹  DOWNLOAD STOPPEN  ⏹',
         'found_videos': '{count} Videos gefunden! 🎉',
+        'load_more': '🔽 Mehr Ergebnisse laden',
         'no_results': 'Keine Ergebnisse 😢',
         'ready_download': 'Bereit zum Download! 🚀',
         'downloading': 'Herunterladen... {percent:.1f}%',
@@ -248,6 +277,14 @@ copies or substantial portions of the Software.</p>
         'actions': 'Aktionen',
         'clear_completed': '🗑️ Abgeschlossene löschen',
         'open_folder': '📂 Ordner öffnen',
+        'ctx_play': 'Abspielen',
+        'ctx_open_folder': 'Ordner öffnen',
+        'ctx_download_again': 'Erneut herunterladen',
+        'ctx_convert_to': 'Konvertieren zu',
+        'ctx_remove': 'Aus Liste entfernen',
+        'converting_file': 'Konvertiere zu {fmt}...',
+        'conversion_done': 'Zu {fmt} konvertiert',
+        'conversion_failed': 'Konvertierung fehlgeschlagen: {error}',
         'player_title': '🎵 Mediaplayer',
         'now_playing': 'Wird abgespielt:',
         'nothing_playing': 'Nichts wird abgespielt',
@@ -257,6 +294,7 @@ copies or substantial portions of the Software.</p>
         'system_tray': 'Taskleistensymbol anzeigen',
         'minimize_tray': 'In Taskleiste minimieren',
         'start_minimized': 'Minimiert starten',
+        'continue_playing_tray': 'Weiterspielen wenn in Taskleiste minimiert',
         'notifications': 'Download-Benachrichtigungen anzeigen',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Gleichzeitige Downloads:',
@@ -276,12 +314,15 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
 <h3>Funktionen</h3>
 <ul>
 <li>🔍 YouTube direkt in der App durchsuchen</li>
-<li>📺 Videos vor dem Download ansehen</li>
+<li>📺 Videos mit integriertem Stream-Player ansehen</li>
 <li>🎬 Videos in Auflösungen von 240p bis 4K herunterladen</li>
 <li>🎵 In Audio konvertieren: MP3, AAC, FLAC, WAV, OGG</li>
 <li>⬇️ Download-Manager mit Fortschrittsverfolgung</li>
-<li>🎧 Integrierter Mediaplayer</li>
-<li>🌍 Mehrsprachige Unterstützung</li>
+<li>🎧 Integrierter Mediaplayer für heruntergeladene Dateien</li>
+<li>📋 Intelligente Playlist-Erkennung mit Batch-Download</li>
+<li>📎 Automatische Erkennung von YouTube-URLs in der Zwischenablage</li>
+<li>🍪 Browser-Cookies für altersbeschränkte Videos</li>
+<li>🌍 Mehrsprachig: English, Deutsch, Hrvatski/Srpski</li>
 <li>🖥️ Taskleisten-Integration</li>
 </ul>
 ''',
@@ -289,6 +330,16 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'links_title': '🔗 Links',
         'github': '⭐ GitHub Repository',
         'report_bug': '🐛 Fehler melden',
+        # Playlist
+        'playlist_detected': 'Playlist erkannt',
+        'playlist_msg': 'Diese Playlist enthält {count} Videos.\nWas möchten Sie tun?',
+        'playlist_first_video': 'Erstes Video anzeigen',
+        'playlist_load_first': 'Erste {count} Videos',
+        'playlist_load_all': 'Alle {count} Videos',
+        'playlist_load_btn': 'Playlist laden',
+        'playlist_loading': 'Lade Playlist-Info...',
+        'playlist_warning': 'Viele Videos zu laden kann langsam sein!',
+        'playlist_cancel': 'Abbrechen',
         'footer': 'Mit ❤️ und etwas Ćevapi gemacht | Balkan Edition 🇧🇦🇭🇷🇷🇸'
     },
     'hr': {
@@ -311,7 +362,9 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'status': '📊 Status',
         'waiting': 'Čekam da odabereš... 👀',
         'download_btn': '⬇️  SKINI ODMAH!  ⬇️',
+        'stop_download': '⏹  ZAUSTAVI SKIDANJE  ⏹',
         'found_videos': 'Pronađeno {count} videa! 🎉',
+        'load_more': '🔽 Učitaj više rezultata',
         'no_results': 'Nema rezultata 😢',
         'ready_download': 'Spremno za skidanje! 🚀',
         'downloading': 'Skidam... {percent:.1f}%',
@@ -329,6 +382,14 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'actions': 'Akcije',
         'clear_completed': '🗑️ Očisti završene',
         'open_folder': '📂 Otvori mapu',
+        'ctx_play': 'Pusti',
+        'ctx_open_folder': 'Otvori mapu',
+        'ctx_download_again': 'Skini ponovo',
+        'ctx_convert_to': 'Konvertuj u',
+        'ctx_remove': 'Ukloni sa liste',
+        'converting_file': 'Konvertuje se u {fmt}...',
+        'conversion_done': 'Konvertovano u {fmt}',
+        'conversion_failed': 'Konverzija neuspješna: {error}',
         'player_title': '🎵 Media Player',
         'now_playing': 'Sad svira:',
         'nothing_playing': 'Ništa ne svira',
@@ -338,6 +399,7 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'system_tray': 'Prikaži ikonu u system trayu',
         'minimize_tray': 'Minimiziraj u system tray',
         'start_minimized': 'Pokreni minimizirano',
+        'continue_playing_tray': 'Nastavi reprodukciju kad je minimizirano u tray',
         'notifications': 'Prikaži obavijesti o preuzimanju',
         'downloads_settings': 'Preuzimanja',
         'simultaneous': 'Istovremena preuzimanja:',
@@ -357,12 +419,15 @@ Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC
 <h3>Mogućnosti</h3>
 <ul>
 <li>🔍 Pretraži YouTube direktno iz aplikacije</li>
-<li>📺 Pregledaj video prije skidanja</li>
+<li>📺 Pregledaj video sa ugrađenim stream playerom</li>
 <li>🎬 Skidaj videe u rezolucijama od 240p do 4K</li>
 <li>🎵 Pretvori u audio: MP3, AAC, FLAC, WAV, OGG</li>
 <li>⬇️ Upravitelj preuzimanja s praćenjem napretka</li>
-<li>🎧 Ugrađeni media player</li>
-<li>🌍 Višejezična podrška</li>
+<li>🎧 Ugrađeni media player za skinute fajlove</li>
+<li>📋 Pametna detekcija playlisti sa batch downloadom</li>
+<li>📎 Auto-detekcija YouTube linkova iz clipboarda</li>
+<li>🍪 Browser cookies podrška za age-restricted videe</li>
+<li>🌍 Višejezično: English, Deutsch, Hrvatski/Srpski</li>
 <li>🖥️ System tray integracija</li>
 </ul>
 ''',
@@ -392,6 +457,16 @@ podlicenciranje i/ili prodaju kopija Softvera.</p>
         'links_title': '🔗 Linkovi',
         'github': '⭐ GitHub Repozitorij',
         'report_bug': '🐛 Prijavi grešku',
+        # Playlist
+        'playlist_detected': 'Playlist detektovan',
+        'playlist_msg': 'Ova playlista sadrži {count} videa.\nŠta želiš uraditi?',
+        'playlist_first_video': 'Prikaži prvi video',
+        'playlist_load_first': 'Prvih {count} videa',
+        'playlist_load_all': 'Svih {count} videa',
+        'playlist_load_btn': 'Učitaj playlistu',
+        'playlist_loading': 'Učitavam info o playlisti...',
+        'playlist_warning': 'Učitavanje puno videa može biti sporo!',
+        'playlist_cancel': 'Odustani',
         'footer': 'Napravljeno s ❤️ i malo kave | Balkan Edition 🇧🇦🇭🇷🇷🇸'
     }
 }
@@ -399,17 +474,18 @@ podlicenciranje i/ili prodaju kopija Softvera.</p>
 
 # ============ WORKER SIGNALS ============
 class WorkerSignals(QObject):
-    """Signali za komunikaciju između threadova i GUI-a"""
-    progress = Signal(str, float, str)  # download_id, procenat, poruka
+    """Signals for communication between worker threads and GUI"""
+    progress = Signal(str, float, str)  # download_id, percentage, message
     finished = Signal(str, str, str)  # download_id, status, filepath
     error = Signal(str, str)  # download_id, error message
-    search_results = Signal(list)  # lista rezultata pretrage
+    search_results = Signal(list)  # list of search results
     thumbnail_ready = Signal(int, QPixmap)  # index, pixmap
+    playlist_info = Signal(str, list)  # original_url, list of video dicts
 
 
 # ============ DOWNLOAD ITEM ============
 class DownloadItem:
-    """Predstavlja jedan download"""
+    """Represents a single download"""
     def __init__(self, url: str, title: str, output_path: str,
                  format_type: str, quality: str):
         self.id = f"{datetime.now().strftime('%H%M%S')}_{hash(url) % 10000}"
@@ -462,25 +538,26 @@ class DownloadItem:
 
 # ============ SEARCH WORKER ============
 class SearchWorker(QThread):
-    """Thread za pretragu da GUI ne blokira"""
+    """Search thread to keep GUI responsive"""
 
-    def __init__(self, query: str, signals: WorkerSignals):
+    def __init__(self, query: str, signals: WorkerSignals, count: int = 10):
         super().__init__()
         self.query = query
         self.signals = signals
+        self.count = count
 
     def run(self):
-        log.info(f"🔍 Počinjem pretragu: '{self.query}'")
+        log.info(f"🔍 Starting search: '{self.query}' (count={self.count})")
         try:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': True,
-                'default_search': 'ytsearch10',
+                'default_search': f'ytsearch{self.count}',
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                results = ydl.extract_info(f"ytsearch10:{self.query}", download=False)
+                results = ydl.extract_info(f"ytsearch{self.count}:{self.query}", download=False)
 
             if results and 'entries' in results:
                 videos = []
@@ -498,20 +575,20 @@ class SearchWorker(QThread):
                         videos.append(video)
                         log.debug(f"  [{i+1}] {video['title'][:40]}...")
 
-                log.info(f"✅ Pronađeno {len(videos)} videa")
+                log.info(f"✅ Found {len(videos)} videos")
                 self.signals.search_results.emit(videos)
             else:
-                log.warning("⚠️ Nema rezultata")
+                log.warning("⚠️ No results")
                 self.signals.search_results.emit([])
 
         except Exception as e:
-            log.error(f"❌ Greška pri pretrazi: {str(e)}")
+            log.error(f"❌ Search error: {str(e)}")
             self.signals.error.emit("search", f"Search error: {str(e)}")
 
 
 # ============ THUMBNAIL WORKER ============
 class ThumbnailWorker(QThread):
-    """Thread za skidanje thumbnailova"""
+    """Thread for downloading thumbnails"""
 
     def __init__(self, index: int, url: str, signals: WorkerSignals):
         super().__init__()
@@ -522,7 +599,7 @@ class ThumbnailWorker(QThread):
     def run(self):
         try:
             if self.url:
-                log.debug(f"📷 Skidam thumbnail [{self.index}]")
+                log.debug(f"📷 Downloading thumbnail [{self.index}]")
                 response = requests.get(self.url, timeout=10)
                 if response.status_code == 200:
                     pixmap = QPixmap()
@@ -534,14 +611,22 @@ class ThumbnailWorker(QThread):
 
 # ============ DOWNLOAD WORKER ============
 class DownloadWorker(QThread):
-    """Thread za skidanje videa/audija"""
+    """Thread for downloading video/audio"""
 
-    def __init__(self, download_item: DownloadItem, signals: WorkerSignals):
+    def __init__(self, download_item: DownloadItem, signals: WorkerSignals, cookies_browser: str = ""):
         super().__init__()
         self.item = download_item
         self.signals = signals
+        self.cookies_browser = cookies_browser
+        self._cancelled = False
+
+    def cancel(self):
+        """Request cancellation of this download"""
+        self._cancelled = True
 
     def progress_hook(self, d):
+        if self._cancelled:
+            raise Exception("Download cancelled by user")
         if d['status'] == 'downloading':
             if 'downloaded_bytes' in d and 'total_bytes' in d and d['total_bytes'] > 0:
                 percent = (d['downloaded_bytes'] / d['total_bytes']) * 100
@@ -558,6 +643,11 @@ class DownloadWorker(QThread):
     def run(self):
         try:
             output_template = os.path.join(self.item.output_path, '%(title)s.%(ext)s')
+
+            # Add cookies if configured
+            cookies_opts = {}
+            if self.cookies_browser:
+                cookies_opts['cookiesfrombrowser'] = (self.cookies_browser,)
 
             if self.item.format_type == 'audio':
                 audio_formats = {
@@ -585,7 +675,9 @@ class DownloadWorker(QThread):
                         'preferredquality': bitrate,
                     }],
                     'prefer_ffmpeg': True,
-                    'allow_remote_components': 'ejs:github',
+                    'remote_components': ['ejs:github'],
+                    'noplaylist': True,
+                    **cookies_opts,
                 }
             else:
                 resolution_formats = {
@@ -608,21 +700,23 @@ class DownloadWorker(QThread):
                     'outtmpl': output_template,
                     'progress_hooks': [self.progress_hook],
                     'merge_output_format': 'mp4',
-                    'allow_remote_components': 'ejs:github',
+                    'remote_components': ['ejs:github'],
+                    'noplaylist': True,
+                    **cookies_opts,
                 }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(self.item.url, download=True)
-                title = info.get('title', 'Video')
 
-                # Pronađi stvarni filepath
+                # Use yt-dlp's own filename to get the actual path on disk
+                base_filepath = ydl.prepare_filename(info)
                 if self.item.format_type == 'audio':
                     codec = audio_formats.get(self.item.quality, ('mp3', '192'))[0]
                     if codec == 'vorbis':
                         codec = 'ogg'
-                    filepath = os.path.join(self.item.output_path, f"{title}.{codec}")
+                    filepath = os.path.splitext(base_filepath)[0] + f".{codec}"
                 else:
-                    filepath = os.path.join(self.item.output_path, f"{title}.mp4")
+                    filepath = os.path.splitext(base_filepath)[0] + ".mp4"
 
             self.signals.progress.emit(self.item.id, 100, "done")
             self.signals.finished.emit(self.item.id, "done", filepath)
@@ -646,6 +740,11 @@ class VideoItemWidget(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(12)
+
+        # Checkbox for multi-select
+        self.checkbox = QCheckBox()
+        self.checkbox.setStyleSheet("QCheckBox { spacing: 0px; } QCheckBox::indicator { width: 18px; height: 18px; }")
+        layout.addWidget(self.checkbox)
 
         # Thumbnail
         self.thumbnail_label = QLabel()
@@ -722,11 +821,11 @@ class BalkGrabGrabber(QMainWindow):
         self.tr = TRANSLATIONS[self.current_language]
 
         self.setWindowTitle(self.tr['app_title'])
-        self.setMinimumSize(900, 750)
-        self.resize(1100, 900)
+        self.setMinimumSize(900, 650)
+        self.resize(1100, 750)
 
         # Set window icon
-        icon_path = os.path.join(APP_DIR, "Icons", "icon_256x256.png")
+        icon_path = os.path.join(APP_DIR, "Icons", ICON_DIR, "icon_256x256.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -751,6 +850,12 @@ class BalkGrabGrabber(QMainWindow):
         self.current_playing_download_id = None
         self.current_playing_btn = None
         self.external_player_process = None  # Track external player (mpv/vlc)
+        self._active_download_id = None  # Track active download for stop button
+        self._playlist_mode = False  # Track if current results are from playlist
+        self._thumbnail_total = 0  # Total thumbnails to load
+        self._thumbnail_loaded = 0  # Thumbnails loaded so far
+        self._download_queue: List[str] = []  # Queue of pending batch download IDs
+        self._active_batch_downloads: set = set()  # Currently running batch download IDs
 
         # Preview player for streaming
         self.preview_player = QMediaPlayer()
@@ -759,6 +864,10 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_audio_output.setVolume(0.7)
         self.preview_is_playing = False
         self.preview_slider_pressed_flag = False
+        self._preview_auto_refreshing = False
+        self._preview_stall_position = 0
+        self._preview_last_position = -1
+        self._preview_stall_count = 0
 
         # System tray
         self.tray_icon = None
@@ -781,6 +890,15 @@ class BalkGrabGrabber(QMainWindow):
         if kwargs:
             text = text.format(**kwargs)
         return text
+
+    def set_statusbar(self, message: str, error: bool = False):
+        """Set status bar message with green (normal) or red (error) color"""
+        color = "#ff4444" if error else "#00ff88"
+        self.statusBar().setStyleSheet(
+            f"QStatusBar {{ background: #1a1a2e; border-top: 1px solid #333; "
+            f"font-size: 12px; color: {color}; }}"
+        )
+        self.statusBar().showMessage(message)
 
     def setup_dark_theme(self):
         """Setup dark theme"""
@@ -864,22 +982,29 @@ class BalkGrabGrabber(QMainWindow):
             }
             QListWidget {
                 background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
+                border: 1px solid #3d3d3d;
                 border-radius: 8px;
-                padding: 5px;
+                padding: 4px;
+                outline: none;
             }
             QListWidget::item {
-                background-color: #2d2d2d;
+                background-color: #333333;
+                border: 1px solid #404040;
                 border-radius: 6px;
-                margin: 3px;
-                padding: 5px;
+                margin: 3px 2px;
+                padding: 4px;
             }
             QListWidget::item:selected {
-                background-color: #00ff88;
-                color: #1a1a1a;
+                background-color: #1a3d2a;
+                border: 1px solid #00ff88;
             }
             QListWidget::item:hover {
-                background-color: #3d3d3d;
+                background-color: #3a3a3a;
+                border: 1px solid #555555;
+            }
+            QListWidget::item:hover:selected {
+                background-color: #1f4a32;
+                border: 1px solid #00ff88;
             }
             QComboBox {
                 background-color: #2d2d2d;
@@ -1090,7 +1215,8 @@ class BalkGrabGrabber(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(8, 5, 8, 2)
+        main_layout.setSpacing(2)
 
         # Tab widget
         self.tab_widget = QTabWidget()
@@ -1111,22 +1237,29 @@ class BalkGrabGrabber(QMainWindow):
 
         # Footer
         footer = QLabel(self.get_text('footer'))
-        footer.setStyleSheet("color: #555555; font-size: 11px;")
+        footer.setStyleSheet("color: #555555; font-size: 10px;")
         footer.setAlignment(Qt.AlignCenter)
+        footer.setFixedHeight(16)
         main_layout.addWidget(footer)
+
+        # Status bar at the bottom of the window
+        self.statusBar().setStyleSheet(
+            "QStatusBar { background: #1a1a2e; border-top: 1px solid #333; font-size: 12px; }"
+        )
+        self.set_statusbar("Ready")
 
     def create_search_tab(self) -> QWidget:
         """Create search tab"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(15)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(6)
+        layout.setContentsMargins(10, 8, 10, 5)
 
         # Header
         header_layout = QHBoxLayout()
 
         title_label = QLabel(self.get_text('app_title'))
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #00ff88;")
+        title_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #00ff88;")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
 
@@ -1138,6 +1271,23 @@ class BalkGrabGrabber(QMainWindow):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(self.get_text('search_placeholder'))
         self.search_input.returnPressed.connect(self.do_search)
+
+        # Paste button inside the search field (right-aligned via layout)
+        paste_layout = QHBoxLayout(self.search_input)
+        paste_layout.setContentsMargins(0, 0, 4, 0)
+        paste_layout.addStretch()
+        self.paste_btn = QToolButton()
+        self.paste_btn.setText("📋")
+        self.paste_btn.setToolTip("Paste URL from clipboard")
+        self.paste_btn.setCursor(Qt.PointingHandCursor)
+        self.paste_btn.setFixedSize(28, 28)
+        self.paste_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; font-size: 18px; }"
+            "QToolButton:hover { background: rgba(255,255,255,0.1); border-radius: 4px; }"
+        )
+        self.paste_btn.clicked.connect(self.paste_from_clipboard)
+        paste_layout.addWidget(self.paste_btn)
+        self.search_input.setTextMargins(0, 0, 32, 0)
         search_layout.addWidget(self.search_input, 1)
 
         self.search_btn = QPushButton(self.get_text('search_btn'))
@@ -1158,10 +1308,44 @@ class BalkGrabGrabber(QMainWindow):
         results_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         left_layout.addWidget(results_label)
 
+        # Select all/deselect all bar (hidden by default, shown for playlists)
+        self.select_bar = QWidget()
+        self.select_bar.setFixedHeight(32)
+        select_bar_layout = QHBoxLayout(self.select_bar)
+        select_bar_layout.setContentsMargins(0, 2, 0, 2)
+        select_bar_layout.setSpacing(4)
+        _sel_btn_style = "font-size: 11px; padding: 2px 8px; border-radius: 3px;"
+        self.select_all_btn = QPushButton("Select All")
+        self.select_all_btn.setStyleSheet(_sel_btn_style)
+        self.select_all_btn.clicked.connect(self.select_all_videos)
+        self.deselect_all_btn = QPushButton("Deselect All")
+        self.deselect_all_btn.setStyleSheet(_sel_btn_style)
+        self.deselect_all_btn.clicked.connect(self.deselect_all_videos)
+        self.download_selected_btn = QPushButton("Download (0)")
+        self.download_selected_btn.setStyleSheet(
+            "font-size: 11px; padding: 2px 10px; border-radius: 3px; "
+            "background-color: #00aa44; color: white; font-weight: bold;"
+        )
+        self.download_selected_btn.clicked.connect(self.download_selected_videos)
+        select_bar_layout.addWidget(self.select_all_btn)
+        select_bar_layout.addWidget(self.deselect_all_btn)
+        select_bar_layout.addStretch()
+        select_bar_layout.addWidget(self.download_selected_btn)
+        self.select_bar.hide()
+        left_layout.addWidget(self.select_bar)
+
         self.results_list = QListWidget()
         self.results_list.setMinimumWidth(450)
         self.results_list.itemClicked.connect(self.on_video_selected)
         left_layout.addWidget(self.results_list)
+
+        self.load_more_btn = QPushButton(self.get_text('load_more'))
+        self.load_more_btn.setObjectName("secondaryBtn")
+        self.load_more_btn.clicked.connect(self.load_more_results)
+        self.load_more_btn.hide()
+        left_layout.addWidget(self.load_more_btn)
+
+        self._search_result_count = 10
 
         splitter.addWidget(left_widget)
 
@@ -1173,7 +1357,8 @@ class BalkGrabGrabber(QMainWindow):
         # Preview
         preview_group = QGroupBox(self.get_text('preview'))
         preview_layout = QVBoxLayout(preview_group)
-        preview_layout.setSpacing(8)
+        preview_layout.setSpacing(4)
+        preview_layout.setContentsMargins(8, 8, 8, 4)
 
         # Title ABOVE video
         self.preview_title = QLabel(self.get_text('no_video_selected'))
@@ -1191,20 +1376,44 @@ class BalkGrabGrabber(QMainWindow):
 
         # Thumbnail
         self.preview_thumbnail = QLabel()
-        self.preview_thumbnail.setFixedSize(320, 180)
+        self.preview_thumbnail.setMinimumSize(260, 146)
+        self.preview_thumbnail.setMaximumSize(320, 180)
+        self.preview_thumbnail.setScaledContents(False)
         self.preview_thumbnail.setStyleSheet("background-color: #2d2d2d; border-radius: 8px;")
         self.preview_thumbnail.setAlignment(Qt.AlignCenter)
         self.preview_thumbnail.setText(f"🎬\n\n{self.get_text('select_video')}")
+        self.preview_thumbnail.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         preview_layout.addWidget(self.preview_thumbnail, alignment=Qt.AlignCenter)
 
-        # === PREVIEW PLAYER CONTROLS ===
-        # Seek bar with time - BELOW thumbnail
-        preview_seek_layout = QHBoxLayout()
-        preview_seek_layout.setSpacing(8)
+        # === PREVIEW PLAYER CONTROLS (single row) ===
+        # Layout: [Play/Stop] [time] [===seeker===] [time] [vol] [vol_slider]
+        preview_controls_layout = QHBoxLayout()
+        preview_controls_layout.setSpacing(6)
+        preview_controls_layout.setContentsMargins(0, 4, 0, 4)
+
+        # Play/Stop button (icon-based)
+        self.preview_play_btn = QPushButton()
+        self.preview_play_btn.setFixedSize(32, 32)
+        self.preview_play_btn.setToolTip("Play / Stop")
+        self.preview_play_btn.clicked.connect(self.toggle_preview_play)
+        self.preview_play_btn.setEnabled(False)
+        self.preview_is_playing = False
+
+        # Load play/stop icons
+        self._play_icon = QIcon(os.path.join(APP_DIR, "Icons", ICON_DIR, "play_32x32.png"))
+        self._stop_icon = QIcon(os.path.join(APP_DIR, "Icons", ICON_DIR, "stop_32x32.png"))
+        self.preview_play_btn.setIcon(self._play_icon)
+        self.preview_play_btn.setIconSize(QSize(20, 20))
+        self.preview_play_btn.setStyleSheet("""
+            QPushButton { background-color: transparent; border: none; }
+            QPushButton:hover { background-color: rgba(0, 255, 136, 30); border-radius: 4px; }
+            QPushButton:disabled { opacity: 0.3; }
+        """)
+        preview_controls_layout.addWidget(self.preview_play_btn)
 
         self.preview_time_current = QLabel("0:00")
-        self.preview_time_current.setStyleSheet("color: #00ff88; font-size: 11px; min-width: 35px;")
-        preview_seek_layout.addWidget(self.preview_time_current)
+        self.preview_time_current.setStyleSheet("color: #00ff88; font-size: 11px; min-width: 30px;")
+        preview_controls_layout.addWidget(self.preview_time_current)
 
         self.preview_seek_slider = ClickableSlider(Qt.Horizontal)
         self.preview_seek_slider.setRange(0, 100)
@@ -1212,108 +1421,85 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_seek_slider.sliderMoved.connect(self.preview_seek_position)
         self.preview_seek_slider.sliderPressed.connect(lambda: setattr(self, 'preview_slider_pressed_flag', True))
         self.preview_seek_slider.sliderReleased.connect(self.preview_slider_released)
-        preview_seek_layout.addWidget(self.preview_seek_slider, 1)
+        preview_controls_layout.addWidget(self.preview_seek_slider, 1)
 
         self.preview_time_total = QLabel("0:00")
-        self.preview_time_total.setStyleSheet("color: #888888; font-size: 11px; min-width: 35px;")
-        preview_seek_layout.addWidget(self.preview_time_total)
-        preview_layout.addLayout(preview_seek_layout)
-
-        # Play button CENTERED, Volume on RIGHT
-        preview_controls_layout = QHBoxLayout()
-
-        # Spacer left (same width as volume to center play button)
-        left_spacer = QWidget()
-        left_spacer.setFixedWidth(120)
-        preview_controls_layout.addWidget(left_spacer)
-
-        preview_controls_layout.addStretch()
-
-        # Play button centered
-        self.preview_play_btn = QPushButton("▶ Play")
-        self.preview_play_btn.setFixedSize(110, 40)
-        self.preview_play_btn.clicked.connect(self.toggle_preview_play)
-        self.preview_play_btn.setEnabled(False)
-        self.preview_is_playing = False
-        preview_controls_layout.addWidget(self.preview_play_btn)
-
-        # Add some bottom margin to prevent clipping
-        preview_controls_layout.setContentsMargins(0, 5, 0, 8)
-
-        preview_controls_layout.addStretch()
-
-        # Volume right side
-        self.preview_volume_label = QLabel("70%")
-        self.preview_volume_label.setStyleSheet("color: #888888; font-size: 11px; min-width: 35px;")
-        preview_controls_layout.addWidget(self.preview_volume_label)
+        self.preview_time_total.setStyleSheet("color: #888888; font-size: 11px; min-width: 30px;")
+        preview_controls_layout.addWidget(self.preview_time_total)
 
         self.preview_volume_slider = QSlider(Qt.Horizontal)
         self.preview_volume_slider.setRange(0, 100)
         self.preview_volume_slider.setValue(70)
-        self.preview_volume_slider.setFixedWidth(80)
+        self.preview_volume_slider.setFixedWidth(60)
         self.preview_volume_slider.setMinimumHeight(20)
         self.preview_volume_slider.valueChanged.connect(self.change_preview_volume)
         preview_controls_layout.addWidget(self.preview_volume_slider)
+
+        self.preview_volume_label = QLabel("70%")
+        self.preview_volume_label.setStyleSheet("color: #888888; font-size: 11px; min-width: 30px;")
+        preview_controls_layout.addWidget(self.preview_volume_label)
 
         preview_layout.addLayout(preview_controls_layout)
         # === END PREVIEW CONTROLS ===
 
         right_layout.addWidget(preview_group)
 
-        # Format
+        # Format GroupBox - single line inside: [Video] [Audio] | Quality: [combo]
         format_group = QGroupBox(self.get_text('format'))
-        format_layout = QVBoxLayout(format_group)
+        format_row = QHBoxLayout(format_group)
+        format_row.setContentsMargins(8, 4, 8, 4)
+        format_row.setSpacing(6)
 
-        type_layout = QHBoxLayout()
         self.type_group = QButtonGroup()
-
         self.video_radio = QRadioButton(self.get_text('video'))
         self.video_radio.setChecked(True)
         self.video_radio.toggled.connect(self.update_quality_options)
         self.type_group.addButton(self.video_radio)
-        type_layout.addWidget(self.video_radio)
+        format_row.addWidget(self.video_radio)
 
         self.audio_radio = QRadioButton(self.get_text('audio'))
         self.audio_radio.toggled.connect(self.update_quality_options)
         self.type_group.addButton(self.audio_radio)
-        type_layout.addWidget(self.audio_radio)
-        type_layout.addStretch()
-        format_layout.addLayout(type_layout)
+        format_row.addWidget(self.audio_radio)
 
-        quality_layout = QHBoxLayout()
         quality_label = QLabel(self.get_text('quality'))
-        quality_layout.addWidget(quality_label)
+        quality_label.setStyleSheet("margin-left: 8px;")
+        format_row.addWidget(quality_label)
 
         self.quality_combo = QComboBox()
         self.update_quality_options()
-        quality_layout.addWidget(self.quality_combo, 1)
-        format_layout.addLayout(quality_layout)
+        format_row.addWidget(self.quality_combo, 1)
 
         right_layout.addWidget(format_group)
 
-        # Status
+        # Status GroupBox: label above progress bar
         status_group = QGroupBox(self.get_text('status'))
         status_layout = QVBoxLayout(status_group)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setValue(0)
-        status_layout.addWidget(self.progress_bar)
+        status_layout.setContentsMargins(8, 4, 8, 4)
+        status_layout.setSpacing(4)
 
         self.status_label = QLabel(self.get_text('waiting'))
+        self.status_label.setStyleSheet("font-size: 11px;")
         self.status_label.setAlignment(Qt.AlignCenter)
         status_layout.addWidget(self.status_label)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFixedHeight(16)
+        status_layout.addWidget(self.progress_bar)
+
         right_layout.addWidget(status_group)
 
-        # Download button
+        # Push download button to bottom
+        right_layout.addStretch()
+
+        # Download button - at the bottom
         self.download_btn = QPushButton(self.get_text('download_btn'))
         self.download_btn.setObjectName("downloadBtn")
-        self.download_btn.setMinimumHeight(60)
+        self.download_btn.setMinimumHeight(50)
         self.download_btn.clicked.connect(self.do_download)
         self.download_btn.setEnabled(False)
         right_layout.addWidget(self.download_btn)
-
-        right_layout.addStretch()
 
         splitter.addWidget(right_widget)
         splitter.setSizes([550, 400])
@@ -1365,8 +1551,11 @@ class BalkGrabGrabber(QMainWindow):
         self.downloads_table.setColumnWidth(1, 200)
         self.downloads_table.setColumnWidth(2, 80)
         self.downloads_table.setColumnWidth(3, 120)
+        self.downloads_table.setColumnWidth(3, 120)
         self.downloads_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.downloads_table.verticalHeader().setVisible(False)
+        self.downloads_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.downloads_table.customContextMenuRequested.connect(self.show_download_context_menu)
 
         # Placeholder
         self.downloads_placeholder = QLabel(self.get_text('no_downloads'))
@@ -1443,10 +1632,14 @@ class BalkGrabGrabber(QMainWindow):
 
     def create_settings_tab(self) -> QWidget:
         """Create settings tab"""
+        # Wrap in scroll area for small screens
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         title = QLabel(self.get_text('settings_title'))
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #00ff88;")
@@ -1483,6 +1676,10 @@ class BalkGrabGrabber(QMainWindow):
         self.minimize_tray_checkbox.setChecked(self.settings.value("minimize_to_tray", False, type=bool))
         appearance_layout.addWidget(self.minimize_tray_checkbox)
 
+        self.continue_playing_tray_checkbox = QCheckBox(self.get_text('continue_playing_tray'))
+        self.continue_playing_tray_checkbox.setChecked(self.settings.value("continue_playing_tray", False, type=bool))
+        appearance_layout.addWidget(self.continue_playing_tray_checkbox)
+
         self.start_minimized_checkbox = QCheckBox(self.get_text('start_minimized'))
         self.start_minimized_checkbox.setChecked(self.settings.value("start_minimized", False, type=bool))
         appearance_layout.addWidget(self.start_minimized_checkbox)
@@ -1518,7 +1715,7 @@ class BalkGrabGrabber(QMainWindow):
         simultaneous_layout.addWidget(simultaneous_label)
 
         self.simultaneous_spin = QSpinBox()
-        self.simultaneous_spin.setRange(1, 5)
+        self.simultaneous_spin.setRange(1, 10)
         self.simultaneous_spin.setValue(self.settings.value("simultaneous_downloads", 2, type=int))
         simultaneous_layout.addWidget(self.simultaneous_spin)
         simultaneous_layout.addStretch()
@@ -1527,6 +1724,34 @@ class BalkGrabGrabber(QMainWindow):
         self.auto_play_checkbox = QCheckBox(self.get_text('auto_play'))
         self.auto_play_checkbox.setChecked(self.settings.value("auto_play", False, type=bool))
         downloads_layout.addWidget(self.auto_play_checkbox)
+
+        # Browser cookies for age-restricted videos
+        cookies_layout = QHBoxLayout()
+        cookies_label = QLabel("Browser cookies:")
+        cookies_label.setToolTip("Uses your browser's cookies to access age-restricted videos and avoid bot detection.\nAuto-detected on first run. Change if you use a different browser for YouTube.")
+        cookies_layout.addWidget(cookies_label)
+
+        self.cookies_browser_combo = QComboBox()
+        self.cookies_browser_combo.addItem("None (disabled)", "")
+        self.cookies_browser_combo.addItem("Firefox", "firefox")
+        self.cookies_browser_combo.addItem("Chrome", "chrome")
+        self.cookies_browser_combo.addItem("Chromium", "chromium")
+        self.cookies_browser_combo.addItem("Brave", "brave")
+        self.cookies_browser_combo.addItem("Edge", "edge")
+
+        saved_browser = self.settings.value("cookies_browser", None)
+        if saved_browser is None:
+            # First run - auto-detect browser
+            saved_browser = self.detect_default_browser()
+            self.settings.setValue("cookies_browser", saved_browser)
+        for i in range(self.cookies_browser_combo.count()):
+            if self.cookies_browser_combo.itemData(i) == saved_browser:
+                self.cookies_browser_combo.setCurrentIndex(i)
+                break
+
+        cookies_layout.addWidget(self.cookies_browser_combo)
+        cookies_layout.addStretch()
+        downloads_layout.addLayout(cookies_layout)
 
         layout.addWidget(downloads_group)
 
@@ -1570,7 +1795,8 @@ class BalkGrabGrabber(QMainWindow):
         save_btn.setMaximumWidth(250)
         layout.addWidget(save_btn, alignment=Qt.AlignCenter)
 
-        return tab
+        scroll.setWidget(tab)
+        return scroll
 
     def create_about_tab(self) -> QWidget:
         """Create about tab"""
@@ -1657,8 +1883,13 @@ class BalkGrabGrabber(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray_icon = QSystemTrayIcon(self)
 
-            # Load icon from file or use fallback
-            icon_path = os.path.join(APP_DIR, "Icons", "icon_64x64.png")
+            # Load icon from file or use fallback (platform-aware)
+            if sys.platform == "win32":
+                icon_path = os.path.join(APP_DIR, "Icons", "windows", "icon.ico")
+                if not os.path.exists(icon_path):
+                    icon_path = os.path.join(APP_DIR, "Icons", "windows", "icon_64x64.png")
+            else:
+                icon_path = os.path.join(APP_DIR, "Icons", "linux", "icon_64x64.png")
             if os.path.exists(icon_path):
                 self.tray_icon.setIcon(QIcon(icon_path))
             else:
@@ -1687,8 +1918,9 @@ class BalkGrabGrabber(QMainWindow):
 
     def tray_activated(self, reason):
         """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.DoubleClick:
-            self.show()
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
+            self.showNormal()
             self.raise_()
             self.activateWindow()
 
@@ -1714,11 +1946,17 @@ class BalkGrabGrabber(QMainWindow):
         self.signals.progress.connect(self.on_download_progress)
         self.signals.finished.connect(self.on_download_finished)
         self.signals.error.connect(self.on_download_error)
+        self.signals.playlist_info.connect(self.on_playlist_info)
+
+        # Clipboard monitoring for YouTube URLs
+        self._clipboard = QApplication.clipboard()
+        self._clipboard.dataChanged.connect(self.on_clipboard_changed)
 
         # Preview player signals
         self.preview_player.positionChanged.connect(self.on_preview_position_changed)
         self.preview_player.durationChanged.connect(self.on_preview_duration_changed)
         self.preview_player.playbackStateChanged.connect(self.on_preview_state_changed)
+        self.preview_player.mediaStatusChanged.connect(self.on_preview_media_status)
 
     def load_settings(self):
         """Load saved settings"""
@@ -1731,11 +1969,13 @@ class BalkGrabGrabber(QMainWindow):
         self.settings.setValue("language", new_lang)
         self.settings.setValue("show_tray", self.tray_checkbox.isChecked())
         self.settings.setValue("minimize_to_tray", self.minimize_tray_checkbox.isChecked())
+        self.settings.setValue("continue_playing_tray", self.continue_playing_tray_checkbox.isChecked())
         self.settings.setValue("start_minimized", self.start_minimized_checkbox.isChecked())
         self.settings.setValue("notifications", self.notifications_checkbox.isChecked())
         self.settings.setValue("simultaneous_downloads", self.simultaneous_spin.value())
         self.settings.setValue("auto_play", self.auto_play_checkbox.isChecked())
         self.settings.setValue("output_path", self.output_path)
+        self.settings.setValue("cookies_browser", self.cookies_browser_combo.currentData())
 
         # Update tray visibility
         if self.tray_icon:
@@ -1752,6 +1992,7 @@ class BalkGrabGrabber(QMainWindow):
             self.status_label.setText(self.get_text('settings_saved'))
 
         log.info("Settings saved")
+        self.set_statusbar(self.get_text('settings_saved'))
 
     def load_downloads(self):
         """Load downloads history from JSON file"""
@@ -1839,6 +2080,35 @@ class BalkGrabGrabber(QMainWindow):
 
         self.quality_combo.addItems(options)
 
+    @staticmethod
+    def is_youtube_url(text: str) -> bool:
+        """Check if text is a valid YouTube URL (not just containing youtube in random text)"""
+        t = text.lower()
+        if not (t.startswith('http://') or t.startswith('https://') or t.startswith('www.')):
+            return False
+        return 'youtube.com/watch' in t or 'youtu.be/' in t or 'youtube.com/playlist' in t
+
+    def paste_from_clipboard(self):
+        """Paste clipboard content into search field"""
+        text = QApplication.clipboard().text().strip()
+        if text:
+            self.search_input.setText(text)
+            self.search_input.setFocus()
+            # Auto-search if it's a YouTube URL
+            if self.is_youtube_url(text):
+                self.do_search()
+
+    def on_clipboard_changed(self):
+        """Auto-detect YouTube URLs in clipboard"""
+        text = QApplication.clipboard().text().strip()
+        if text and self.is_youtube_url(text):
+            # Only intercept if search field is empty or has old content
+            current = self.search_input.text().strip()
+            if current != text:
+                self.search_input.setText(text)
+                self.set_statusbar("YouTube link detected in clipboard!")
+                log.info(f"📋 Clipboard intercepted: {text[:60]}...")
+
     def do_search(self):
         """Start search"""
         query = self.search_input.text().strip()
@@ -1852,55 +2122,269 @@ class BalkGrabGrabber(QMainWindow):
             self.set_direct_url(query)
             return
 
+        self._playlist_mode = False
+        self.select_bar.hide()
+        self._search_result_count = 10
         self.search_btn.setEnabled(False)
         self.search_btn.setText(self.get_text('searching'))
+        self.load_more_btn.hide()
         self.results_list.clear()
         self.status_label.setText(self.get_text('searching'))
 
-        self.search_worker = SearchWorker(query, self.signals)
+        self.set_statusbar("Searching YouTube...")
+        self.search_worker = SearchWorker(query, self.signals, self._search_result_count)
+        self.search_worker.start()
+
+    def load_more_results(self):
+        """Load more search results"""
+        query = self.search_input.text().strip()
+        if not query:
+            return
+
+        self._search_result_count += 10
+        self.load_more_btn.setEnabled(False)
+        self.load_more_btn.setText("Loading...")
+        self.search_btn.setEnabled(False)
+
+        self.search_worker = SearchWorker(query, self.signals, self._search_result_count)
         self.search_worker.start()
 
     def set_direct_url(self, url: str):
-        """Set direct URL as selected video"""
-        self.selected_video = {'url': url, 'title': 'Loading...', 'thumbnail': ''}
-        self.preview_title.setText("Loading video info...")
-        self.download_btn.setEnabled(True)
+        """Set direct URL as selected video, detect playlists"""
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+
+        # Detect playlist URL - fetch playlist info in background
+        if 'list' in params or 'start_radio' in params:
+            self.results_list.clear()
+            self.load_more_btn.hide()
+            self.status_label.setText(self.get_text('playlist_loading'))
+            self.search_btn.setEnabled(False)
+            self.search_btn.setText(self.get_text('searching'))
+            self.set_statusbar("Playlist detected - fetching video list, please wait...")
+            threading.Thread(target=self.fetch_playlist_info, args=(url,), daemon=True).start()
+            return
+
+        url = self.clean_youtube_url(url)
+        self.results_list.clear()
+        self.load_more_btn.hide()
+        self.status_label.setText("Loading video info...")
+        self.search_btn.setEnabled(False)
+        self.search_btn.setText(self.get_text('searching'))
         threading.Thread(target=self.fetch_video_info, args=(url,), daemon=True).start()
+
+    @staticmethod
+    def clean_youtube_url(url: str) -> str:
+        """Remove playlist parameters from YouTube URL to get single video only"""
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        # Keep only the video ID parameter, remove list/index/playlist stuff
+        clean_params = {}
+        if 'v' in params:
+            clean_params['v'] = params['v'][0]
+        if clean_params:
+            clean_query = urlencode(clean_params)
+            return urlunparse(parsed._replace(query=clean_query))
+        # For youtu.be short URLs, just strip query params
+        if 'youtu.be' in parsed.netloc:
+            return urlunparse(parsed._replace(query=''))
+        return url
+
+    @staticmethod
+    def detect_default_browser() -> str:
+        """Auto-detect which browser is available for cookies"""
+        browser_paths = {
+            'firefox': os.path.expanduser('~/.mozilla/firefox'),
+            'chrome': os.path.expanduser('~/.config/google-chrome'),
+            'chromium': os.path.expanduser('~/.config/chromium'),
+            'brave': os.path.expanduser('~/.config/BraveSoftware/Brave-Browser'),
+            'edge': os.path.expanduser('~/.config/microsoft-edge'),
+        }
+        if sys.platform == 'win32':
+            browser_paths = {
+                'firefox': os.path.join(os.environ.get('APPDATA', ''), 'Mozilla', 'Firefox', 'Profiles'),
+                'chrome': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data'),
+                'edge': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Edge', 'User Data'),
+                'brave': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware', 'Brave-Browser', 'User Data'),
+            }
+        for browser, path in browser_paths.items():
+            if os.path.isdir(path):
+                return browser
+        return ""
+
+    def fetch_playlist_info(self, url: str):
+        """Fetch playlist info in background thread"""
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': True,
+                'remote_components': ['ejs:github'],
+            }
+            cookies_browser = self.settings.value("cookies_browser", "", type=str)
+            if cookies_browser:
+                ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+            videos = []
+            if 'entries' in info and info['entries']:
+                for entry in info['entries']:
+                    if entry:
+                        video = {
+                            'id': entry.get('id', ''),
+                            'title': entry.get('title', 'Unknown'),
+                            'url': entry.get('url', f"https://www.youtube.com/watch?v={entry.get('id', '')}"),
+                            'thumbnail': entry.get('thumbnail', entry.get('thumbnails', [{}])[0].get('url', '') if entry.get('thumbnails') else ''),
+                            'duration': entry.get('duration', 0),
+                            'channel': entry.get('channel', entry.get('uploader', 'Unknown')),
+                        }
+                        videos.append(video)
+
+            log.info(f"📋 Playlist info: {len(videos)} videos found")
+            self.signals.playlist_info.emit(url, videos)
+
+        except Exception as e:
+            log.error(f"Error fetching playlist info: {e}")
+            self.signals.playlist_info.emit(url, [])
+
+    @Slot(str, list)
+    def on_playlist_info(self, url: str, videos: list):
+        """Handle playlist info - show dialog with options"""
+        self.search_btn.setEnabled(True)
+        self.search_btn.setText(self.get_text('search_btn'))
+
+        if not videos:
+            # Couldn't fetch playlist info, fall back to single video
+            clean_url = self.clean_youtube_url(url)
+            self.status_label.setText("Loading video info...")
+            self.search_btn.setEnabled(False)
+            self.search_btn.setText(self.get_text('searching'))
+            self.set_statusbar("Could not fetch playlist - loading single video...")
+            threading.Thread(target=self.fetch_video_info, args=(clean_url,), daemon=True).start()
+            return
+
+        count = len(videos)
+        self.set_statusbar(f"Playlist loaded - {count} videos found")
+
+        # Build custom dialog with dropdown for large playlists
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self.get_text('playlist_detected'))
+        dialog.setMinimumWidth(350)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+
+        # Info label
+        info_label = QLabel(self.get_text('playlist_msg', count=count))
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        # "Show First Video" button
+        first_btn = QPushButton(self.get_text('playlist_first_video'))
+        layout.addWidget(first_btn)
+
+        # Playlist load section: dropdown + load button
+        playlist_row = QHBoxLayout()
+        combo = QComboBox()
+        if count > 20:
+            combo.addItem(self.get_text('playlist_load_first', count=20), 20)
+        if count > 50:
+            combo.addItem(self.get_text('playlist_load_first', count=50), 50)
+        if count > 100:
+            combo.addItem(self.get_text('playlist_load_first', count=100), 100)
+        warning = " \u26a0\ufe0f" if count > 100 else ""
+        combo.addItem(self.get_text('playlist_load_all', count=count) + warning, count)
+        playlist_row.addWidget(combo, 1)
+
+        load_btn = QPushButton(self.get_text('playlist_load_btn'))
+        playlist_row.addWidget(load_btn)
+        layout.addLayout(playlist_row)
+
+        # Warning label for very large playlists
+        if count > 100:
+            warn_label = QLabel("\u26a0\ufe0f " + self.get_text('playlist_warning'))
+            warn_label.setStyleSheet("color: #ff6b6b; font-size: 11px;")
+            layout.addWidget(warn_label)
+
+        # Cancel button
+        cancel_btn = QPushButton(self.get_text('playlist_cancel'))
+        layout.addWidget(cancel_btn)
+
+        result = {'action': None, 'count': 0}
+
+        def on_first():
+            result['action'] = 'first'
+            dialog.accept()
+
+        def on_load():
+            result['action'] = 'playlist'
+            result['count'] = combo.currentData()
+            dialog.accept()
+
+        first_btn.clicked.connect(on_first)
+        load_btn.clicked.connect(on_load)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec()
+
+        if result['action'] == 'first':
+            clean_url = self.clean_youtube_url(url)
+            self.results_list.clear()
+            self.load_more_btn.hide()
+            self.status_label.setText("Loading video info...")
+            self.search_btn.setEnabled(False)
+            self.search_btn.setText(self.get_text('searching'))
+            self.set_statusbar("Loading first video from playlist...")
+            threading.Thread(target=self.fetch_video_info, args=(clean_url,), daemon=True).start()
+        elif result['action'] == 'playlist':
+            load_count = result['count']
+            self._playlist_mode = True
+            self.results_list.clear()
+            self.load_more_btn.hide()
+            self.set_statusbar(f"Loading {load_count} videos from playlist...")
+            self.signals.search_results.emit(videos[:load_count])
+        else:
+            self.set_statusbar("Ready")
+            self.status_label.setText(self.get_text('waiting'))
 
     def fetch_video_info(self, url: str):
         """Fetch video info from URL"""
         try:
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            ydl_opts = {
+                'quiet': True,
+                'noplaylist': True,
+                'remote_components': ['ejs:github'],
+            }
+            cookies_browser = self.settings.value("cookies_browser", "", type=str)
+            if cookies_browser:
+                ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
-            self.selected_video = {
+            # Safety: if playlist leaked through despite noplaylist, use first entry
+            if 'entries' in info and info['entries']:
+                info = info['entries'][0]
+
+            video = {
                 'url': url,
                 'title': info.get('title', 'Unknown'),
                 'thumbnail': info.get('thumbnail', ''),
                 'duration': info.get('duration', 0),
                 'channel': info.get('channel', 'Unknown'),
+                'id': info.get('id', ''),
             }
 
-            QMetaObject.invokeMethod(self, "_update_preview_info", Qt.QueuedConnection)
-
-            if self.selected_video.get('thumbnail'):
-                self.load_preview_thumbnail(self.selected_video['thumbnail'])
+            # Emit as search result so video appears in the list
+            self.signals.search_results.emit([video])
 
         except Exception as e:
-            log.error(f"Error fetching video info: {e}")
+            error_msg = str(e)
+            log.error(f"Error fetching video info: {error_msg}")
+            # Store error for status bar display (will be shown when empty results arrive)
+            short_msg = error_msg.split(': ')[-1] if ': ' in error_msg else error_msg
+            self._last_fetch_error = short_msg
+            self.signals.search_results.emit([])
 
-    @Slot()
-    def _update_preview_info(self):
-        """Update preview info from main thread"""
-        if self.selected_video:
-            self.preview_title.setText(self.selected_video.get('title', 'Unknown'))
-            duration = self.selected_video.get('duration', 0)
-            if duration:
-                duration = int(duration)
-                duration_str = f"{duration // 60}:{duration % 60:02d}"
-            else:
-                duration_str = "N/A"
-            self.preview_meta.setText(f"📺 {self.selected_video.get('channel', '')} | ⏱️ {duration_str}")
 
     def load_preview_thumbnail(self, url: str):
         """Load preview thumbnail"""
@@ -1932,14 +2416,29 @@ class BalkGrabGrabber(QMainWindow):
 
         self.search_btn.setEnabled(True)
         self.search_btn.setText(self.get_text('search_btn'))
+        self.load_more_btn.setEnabled(True)
+        self.load_more_btn.setText(self.get_text('load_more'))
         self.current_videos = videos
         self.thumbnail_workers.clear()
+        self.results_list.clear()
 
         if not videos:
-            self.status_label.setText(self.get_text('no_results'))
+            error = getattr(self, '_last_fetch_error', None)
+            if error:
+                self.status_label.setText(self.get_text('no_results'))
+                self.set_statusbar(f"Video error: {error}", error=True)
+                self._last_fetch_error = None
+            else:
+                self.status_label.setText(self.get_text('no_results'))
+                self.set_statusbar("No results found")
+            self.load_more_btn.hide()
             return
 
         self.status_label.setText(self.get_text('found_videos', count=len(videos)))
+
+        # Reset thumbnail progress tracking
+        self._thumbnail_total = 0
+        self._thumbnail_loaded = 0
 
         for i, video in enumerate(videos):
             item = QListWidgetItem()
@@ -1949,10 +2448,32 @@ class BalkGrabGrabber(QMainWindow):
             self.results_list.addItem(item)
             self.results_list.setItemWidget(item, widget)
 
+            # Auto-check all in playlist mode, connect checkbox signal
+            if self._playlist_mode:
+                widget.checkbox.setChecked(True)
+            widget.checkbox.stateChanged.connect(self.update_selection_count)
+
             if video.get('thumbnail'):
+                self._thumbnail_total += 1
                 worker = ThumbnailWorker(i, video['thumbnail'], self.signals)
                 self.thumbnail_workers.append(worker)
                 worker.start()
+
+        # Show thumbnail loading progress in statusbar
+        if self._thumbnail_total > 0:
+            self.set_statusbar(f"Loading thumbnails... 0/{self._thumbnail_total} (0%)")
+
+        # Show select bar and update count for all results
+        self.select_bar.show()
+        self.update_selection_count()
+
+        # Show Load More only for search results, not playlist mode
+        if self._playlist_mode:
+            self.load_more_btn.hide()
+        elif len(videos) >= self._search_result_count:
+            self.load_more_btn.show()
+        else:
+            self.load_more_btn.hide()
 
     @Slot(int, QPixmap)
     def on_thumbnail_ready(self, index: int, pixmap: QPixmap):
@@ -1962,6 +2483,17 @@ class BalkGrabGrabber(QMainWindow):
             widget = self.results_list.itemWidget(item)
             if widget and isinstance(widget, VideoItemWidget):
                 widget.set_thumbnail(pixmap)
+
+        # Update thumbnail loading progress
+        self._thumbnail_loaded += 1
+        if self._thumbnail_total > 0 and self._thumbnail_loaded < self._thumbnail_total:
+            pct = int(self._thumbnail_loaded / self._thumbnail_total * 100)
+            self.set_statusbar(f"Loading thumbnails... {self._thumbnail_loaded}/{self._thumbnail_total} ({pct}%)")
+        elif self._thumbnail_total > 0 and self._thumbnail_loaded >= self._thumbnail_total:
+            if self._playlist_mode:
+                self.update_selection_count()
+            else:
+                self.set_statusbar(f"Found {len(self.current_videos)} videos - thumbnails loaded")
 
     def on_video_selected(self, item: QListWidgetItem):
         """Handle video selection"""
@@ -1983,10 +2515,114 @@ class BalkGrabGrabber(QMainWindow):
             if self.selected_video.get('thumbnail'):
                 self.load_preview_thumbnail(self.selected_video['thumbnail'])
 
+            # If a single download was tracked, let it continue in background
+            # and reset the button for the newly selected video
+            if self._active_download_id:
+                self._active_download_id = None
+                self.download_btn.setText(self.get_text('download_btn'))
+                self.download_btn.setStyleSheet("")
+
             self.download_btn.setEnabled(True)
             self.preview_play_btn.setEnabled(True)
             self.status_label.setText(self.get_text('ready_download'))
             self.stop_preview()  # Reset preview
+
+    # ============ PLAYLIST SELECTION METHODS ============
+    def update_selection_count(self):
+        """Update status bar with number of selected videos"""
+        count = 0
+        for row in range(self.results_list.count()):
+            item = self.results_list.item(row)
+            widget = self.results_list.itemWidget(item)
+            if widget and isinstance(widget, VideoItemWidget) and widget.checkbox.isChecked():
+                count += 1
+        total = self.results_list.count()
+        self.set_statusbar(f"{count} of {total} videos selected and ready to download")
+        self.download_selected_btn.setText(f"Download ({count})")
+        self.download_selected_btn.setEnabled(count > 0)
+
+    def select_all_videos(self):
+        """Check all video checkboxes"""
+        for row in range(self.results_list.count()):
+            item = self.results_list.item(row)
+            widget = self.results_list.itemWidget(item)
+            if widget and isinstance(widget, VideoItemWidget):
+                widget.checkbox.setChecked(True)
+        self.update_selection_count()
+
+    def deselect_all_videos(self):
+        """Uncheck all video checkboxes"""
+        for row in range(self.results_list.count()):
+            item = self.results_list.item(row)
+            widget = self.results_list.itemWidget(item)
+            if widget and isinstance(widget, VideoItemWidget):
+                widget.checkbox.setChecked(False)
+        self.update_selection_count()
+
+    def download_selected_videos(self):
+        """Download checked videos respecting the simultaneous downloads limit"""
+        selected = []
+        for row in range(self.results_list.count()):
+            item = self.results_list.item(row)
+            widget = self.results_list.itemWidget(item)
+            if widget and isinstance(widget, VideoItemWidget) and widget.checkbox.isChecked():
+                index = item.data(Qt.UserRole)
+                if index is not None and index < len(self.current_videos):
+                    selected.append(self.current_videos[index])
+
+        if not selected:
+            return
+
+        format_type = 'audio' if self.audio_radio.isChecked() else 'video'
+        quality = self.quality_combo.currentText()
+
+        for video in selected:
+            url = video.get('url')
+            if not url:
+                video_id = video.get('id')
+                if video_id:
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+                else:
+                    continue
+
+            download = DownloadItem(
+                url=url,
+                title=video.get('title', 'Unknown'),
+                output_path=self.output_path,
+                format_type=format_type,
+                quality=quality
+            )
+            self.downloads[download.id] = download
+            self.add_download_to_table(download)
+            self._download_queue.append(download.id)
+
+        self._flush_download_queue()
+        self.set_statusbar(f"Queued {len(selected)} videos for download")
+        self.save_downloads()
+        log.info(f"⬇️ Batch download queued: {len(selected)} videos")
+
+    def _flush_download_queue(self):
+        """Start downloads from queue up to the simultaneous downloads limit"""
+        max_concurrent = self.settings.value("simultaneous_downloads", 2, type=int)
+        active_count = len([
+            did for did in self._active_batch_downloads
+            if did in self.download_workers and self.download_workers[did].isRunning()
+        ])
+        cookies_browser = self.settings.value("cookies_browser", "", type=str)
+
+        while self._download_queue and active_count < max_concurrent:
+            download_id = self._download_queue.pop(0)
+            if download_id in self.downloads:
+                download = self.downloads[download_id]
+                worker = DownloadWorker(download, self.signals, cookies_browser)
+                self.download_workers[download_id] = worker
+                self._active_batch_downloads.add(download_id)
+                worker.start()
+                active_count += 1
+                log.info(f"⬇️ Starting queued download: {download.title}")
+
+        if self._download_queue:
+            log.info(f"⏳ {len(self._download_queue)} downloads waiting in queue")
 
     # ============ PREVIEW PLAYER METHODS ============
     def toggle_preview_play(self):
@@ -2001,6 +2637,9 @@ class BalkGrabGrabber(QMainWindow):
         if not self.selected_video:
             return
 
+        # Stop any other audio first
+        self.stop_playback()
+
         url = self.selected_video.get('url')
         if not url:
             video_id = self.selected_video.get('id')
@@ -2009,7 +2648,7 @@ class BalkGrabGrabber(QMainWindow):
             else:
                 return
 
-        self.preview_play_btn.setText("...")
+        self.preview_play_btn.setIcon(self._stop_icon)
         self.preview_play_btn.setEnabled(False)
         self.status_label.setText("Loading preview...")
 
@@ -2022,8 +2661,12 @@ class BalkGrabGrabber(QMainWindow):
                 'quiet': True,
                 'no_warnings': True,
                 'format': 'bestaudio[ext=m4a]/bestaudio/best',
-                'allow_remote_components': 'ejs:github',
+                'remote_components': ['ejs:github'],
+                'noplaylist': True,
             }
+            cookies_browser = self.settings.value("cookies_browser", "", type=str)
+            if cookies_browser:
+                ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 # Try to get direct URL or from formats
@@ -2057,7 +2700,7 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_player.setSource(QUrl(stream_url))
         self.preview_player.play()
         self.preview_is_playing = True
-        self.preview_play_btn.setText("⏹ Stop")
+        self.preview_play_btn.setIcon(self._stop_icon)
         self.preview_play_btn.setEnabled(True)
         self.status_label.setText("Playing preview...")
 
@@ -2071,6 +2714,10 @@ class BalkGrabGrabber(QMainWindow):
 
     def stop_preview(self):
         """Stop preview"""
+        self._preview_auto_refreshing = False
+        self._preview_stall_position = 0
+        self._preview_last_position = -1
+        self._preview_stall_count = 0
         self.preview_player.stop()
         self.preview_is_playing = False
         self._set_preview_btn_play()
@@ -2081,12 +2728,14 @@ class BalkGrabGrabber(QMainWindow):
 
     def _set_preview_btn_play(self):
         """Set preview button to play"""
-        self.preview_play_btn.setText("▶ Play")
+        self.preview_play_btn.setIcon(self._play_icon)
 
     def preview_seek_position(self, position):
         """Seek preview"""
         if self.preview_player.duration() > 0:
             self.preview_player.setPosition(int(position * self.preview_player.duration() / 100))
+            if self.preview_is_playing:
+                self.status_label.setText("Buffering, please wait...")
 
     def preview_slider_released(self):
         """Handle slider release"""
@@ -2099,7 +2748,24 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_volume_label.setText(f"{value}%")
 
     def on_preview_position_changed(self, position):
-        """Handle preview position"""
+        """Handle preview position - also detect stalls via timeout"""
+        if self._preview_auto_refreshing:
+            return  # Ignore position updates during stream refresh
+
+        # Stall detection: if position hasn't changed for 5 consecutive updates (~5s)
+        if self.preview_is_playing and position > 0:
+            if position == self._preview_last_position:
+                self._preview_stall_count += 1
+                if self._preview_stall_count >= 5:
+                    log.warning(f"Preview stall detected (position stuck at {position}ms for 5s)")
+                    self._preview_stall_count = 0
+                    # Trigger the same refresh as StalledMedia
+                    self.on_preview_media_status(QMediaPlayer.MediaStatus.StalledMedia)
+                    return
+            else:
+                self._preview_stall_count = 0
+            self._preview_last_position = position
+
         if not self.preview_slider_pressed_flag and self.preview_player.duration() > 0:
             self.preview_seek_slider.setValue(int(position * 100 / self.preview_player.duration()))
         secs = position // 1000
@@ -2110,14 +2776,63 @@ class BalkGrabGrabber(QMainWindow):
         secs = duration // 1000
         self.preview_time_total.setText(f"{secs // 60}:{secs % 60:02d}")
 
+    def on_preview_media_status(self, status):
+        """Handle preview media status - detect stalls and auto-refresh stream"""
+        if status == QMediaPlayer.MediaStatus.StalledMedia and not self._preview_auto_refreshing:
+            log.warning("Preview stalled, fetching fresh stream URL...")
+            self._preview_stall_position = self.preview_player.position()
+            self._preview_auto_refreshing = True
+            self.preview_play_btn.setIcon(self._stop_icon)
+            self.preview_play_btn.setEnabled(False)
+            self.status_label.setText("Refreshing stream...")
+
+            # Re-fetch fresh stream URL
+            url = self.selected_video.get('url', '')
+            if not url:
+                video_id = self.selected_video.get('id', '')
+                if video_id:
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+            if url:
+                threading.Thread(target=self._fetch_stream_url, args=(url,), daemon=True).start()
+
+        elif status == QMediaPlayer.MediaStatus.LoadedMedia and self._preview_auto_refreshing:
+            # Fresh URL loaded, seek to where we left off
+            log.info(f"Stream refreshed, resuming at {self._preview_stall_position}ms")
+            self.preview_player.setPosition(self._preview_stall_position)
+            self._preview_auto_refreshing = False
+            self._preview_stall_position = 0
+            self.preview_play_btn.setIcon(self._stop_icon)
+            self.preview_play_btn.setEnabled(True)
+            self.status_label.setText("Playing preview...")
+
+        elif status == QMediaPlayer.MediaStatus.BufferedMedia:
+            if self.preview_is_playing and not self._preview_auto_refreshing:
+                self.status_label.setText("Playing preview...")
+
+        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self.preview_is_playing = False
+            self._set_preview_btn_play()
+            self.preview_seek_slider.setValue(0)
+            self.preview_time_current.setText("0:00")
+
     def on_preview_state_changed(self, state):
         """Handle preview state"""
-        if state == QMediaPlayer.PlaybackState.StoppedState:
+        if self._preview_auto_refreshing:
+            return  # Ignore state changes during stream refresh
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            if self.preview_is_playing:
+                self.status_label.setText("Playing preview...")
+        elif state == QMediaPlayer.PlaybackState.StoppedState:
             self.preview_is_playing = False
             self._set_preview_btn_play()
 
     def do_download(self):
-        """Start download"""
+        """Start or stop download (dynamic button)"""
+        # If download is active, stop it
+        if hasattr(self, '_active_download_id') and self._active_download_id:
+            self.stop_active_download()
+            return
+
         if not self.selected_video:
             return
 
@@ -2142,23 +2857,45 @@ class BalkGrabGrabber(QMainWindow):
         )
 
         self.downloads[download.id] = download
+        self._active_download_id = download.id
 
         # Add to table
         self.add_download_to_table(download)
 
         # Start worker
-        worker = DownloadWorker(download, self.signals)
+        cookies_browser = self.settings.value("cookies_browser", "", type=str)
+        worker = DownloadWorker(download, self.signals, cookies_browser)
         self.download_workers[download.id] = worker
         worker.start()
 
-        # Update UI
-        self.download_btn.setEnabled(False)
+        # Update UI - button becomes Stop Download
+        self.download_btn.setText(self.get_text('stop_download'))
+        self.download_btn.setStyleSheet("background-color: #cc3333; color: white; font-weight: bold; font-size: 16px; border-radius: 8px;")
         self.status_label.setText(self.get_text('downloading', percent=0))
 
-        # Switch to downloads tab
-        self.tab_widget.setCurrentIndex(1)
-
+        self.set_statusbar(f"Downloading: {download.title}")
         log.info(f"⬇️ Started download: {download.title}")
+
+    def stop_active_download(self):
+        """Stop the currently active download"""
+        if not hasattr(self, '_active_download_id') or not self._active_download_id:
+            return
+
+        download_id = self._active_download_id
+        if download_id in self.download_workers:
+            worker = self.download_workers[download_id]
+            worker.cancel()
+            log.info(f"⏹ Stopping download: {download_id}")
+
+        self.set_statusbar("Download stopped")
+        self._reset_download_btn()
+
+    def _reset_download_btn(self):
+        """Reset download button to normal state"""
+        self._active_download_id = None
+        self.download_btn.setText(self.get_text('download_btn'))
+        self.download_btn.setStyleSheet("")  # Reset to default theme style
+        self.download_btn.setEnabled(True if self.selected_video else False)
 
     def add_download_to_table(self, download: DownloadItem, from_history: bool = False):
         """Add download to table"""
@@ -2184,16 +2921,18 @@ class BalkGrabGrabber(QMainWindow):
         status_item.setTextAlignment(Qt.AlignCenter)
         self.downloads_table.setItem(row, 2, status_item)
 
-        # Play/Stop button
-        play_btn = QPushButton("▶ Play")
+        # Action button (Cancel while downloading, Play/Stop when done)
+        play_btn = QPushButton()
         play_btn.setProperty("download_id", download.id)
-        play_btn.setProperty("is_playing", False)
-        play_btn.clicked.connect(lambda checked, d=download, btn=play_btn: self.toggle_download_play(d.id, btn))
+        play_btn.setProperty("btn_state", "idle")
+        play_btn.clicked.connect(lambda checked, d=download, btn=play_btn: self.on_table_btn_clicked(d.id, btn))
         self.downloads_table.setCellWidget(row, 3, play_btn)
 
         # Set initial state based on whether loading from history
         if from_history:
             progress_bar.setValue(100)
+            play_btn.setText("▶ Play")
+            play_btn.setProperty("btn_state", "idle")
             if download.status == 'done':
                 if download.format_type == 'audio':
                     status_item.setText("Audio")
@@ -2211,7 +2950,10 @@ class BalkGrabGrabber(QMainWindow):
             progress_bar.setValue(0)
             status_item.setText("Waiting...")
             status_item.setForeground(QColor("#888888"))
-            play_btn.setEnabled(False)
+            play_btn.setText("✕ Cancel")
+            play_btn.setProperty("btn_state", "downloading")
+            play_btn.setEnabled(True)
+            play_btn.setStyleSheet("color: #ff8800; font-weight: bold;")
 
         self.downloads_table.setRowHeight(row, 55)
 
@@ -2236,13 +2978,27 @@ class BalkGrabGrabber(QMainWindow):
                             status_item.setText("Downloading...")
                             status_item.setForeground(QColor("#00ff88"))
                         elif status == "processing":
-                            status_item.setText("Processing...")
+                            title_item = self.downloads_table.item(row, 0)
+                            fmt = title_item.data(Qt.UserRole + 1) if title_item else "audio"
+                            if fmt == "audio":
+                                status_item.setText("Converting...")
+                            else:
+                                status_item.setText("Merging...")
                             status_item.setForeground(QColor("#ffaa00"))
                     break
 
             # Update main progress bar
             self.progress_bar.setValue(int(percent))
             self.status_label.setText(self.get_text('downloading', percent=percent))
+            title = self.downloads[download_id].title[:40]
+            if status == "processing":
+                fmt = self.downloads[download_id].format_type if download_id in self.downloads else "audio"
+                if fmt == "audio":
+                    self.set_statusbar(f"Converting audio: {title}...")
+                else:
+                    self.set_statusbar(f"Merging video: {title}...")
+            else:
+                self.set_statusbar(f"Downloading: {title} - {percent:.0f}%")
 
     @Slot(str, str, str)
     def on_download_finished(self, download_id: str, status: str, filepath: str):
@@ -2263,30 +3019,40 @@ class BalkGrabGrabber(QMainWindow):
 
                     status_item = self.downloads_table.item(row, 2)
                     if status_item:
-                        # Get format type from title item
                         title_item = self.downloads_table.item(row, 0)
                         format_type = title_item.data(Qt.UserRole + 1) if title_item else "audio"
                         if format_type == "audio":
-                            status_item.setText("Audio")
+                            status_item.setText("Converted")
                             status_item.setForeground(QColor("#00ff88"))
                         else:
-                            status_item.setText("Video")
+                            status_item.setText("Complete")
                             status_item.setForeground(QColor("#00aaff"))
 
                     play_btn = self.downloads_table.cellWidget(row, 3)
                     if play_btn:
+                        play_btn.setText("▶ Play")
+                        play_btn.setProperty("btn_state", "idle")
+                        play_btn.setStyleSheet("")
                         play_btn.setEnabled(True)
                     break
 
         # Re-enable download button
-        self.download_btn.setEnabled(True)
+        self._reset_download_btn()
         self.progress_bar.setValue(100)
         self.status_label.setText(self.get_text('done'))
+        title = self.downloads[download_id].title[:50] if download_id in self.downloads else ""
+        format_type = self.downloads[download_id].format_type if download_id in self.downloads else "audio"
+        if format_type == "audio":
+            self.set_statusbar(f"Download and conversion complete: {title}")
+            notif_title = "Download & Conversion Complete"
+        else:
+            self.set_statusbar(f"Download complete: {title}")
+            notif_title = "Download Complete"
 
         # Notification
         if self.settings.value("notifications", True, type=bool) and self.tray_icon:
             self.tray_icon.showMessage(
-                "Download Complete",
+                notif_title,
                 f"{self.downloads[download_id].title}",
                 QSystemTrayIcon.Information,
                 3000
@@ -2299,10 +3065,24 @@ class BalkGrabGrabber(QMainWindow):
         # Save downloads history
         self.save_downloads()
 
+        # If this was a batch download, remove from active set and start next in queue
+        if download_id in self._active_batch_downloads:
+            self._active_batch_downloads.discard(download_id)
+            self._flush_download_queue()
+
     @Slot(str, str)
     def on_download_error(self, download_id: str, error: str):
-        """Handle download error"""
+        """Handle download/search error"""
         log.error(f"❌ Download error: {error}")
+
+        # Search errors don't have a download entry
+        if download_id == "search":
+            short_msg = error.split(': ')[-1] if ': ' in error else error
+            self.set_statusbar(f"Search failed: {short_msg}", error=True)
+            self.search_btn.setEnabled(True)
+            self.search_btn.setText(self.get_text('search_btn'))
+            self.status_label.setText(self.get_text('no_results'))
+            return
 
         if download_id in self.downloads:
             self.downloads[download_id].status = "error"
@@ -2315,10 +3095,22 @@ class BalkGrabGrabber(QMainWindow):
                     if status_item:
                         status_item.setText("Failed")
                         status_item.setForeground(QColor("#ff4444"))
+                    play_btn = self.downloads_table.cellWidget(row, 3)
+                    if play_btn:
+                        play_btn.setText("▶ Play")
+                        play_btn.setProperty("btn_state", "idle")
+                        play_btn.setStyleSheet("")
+                        play_btn.setEnabled(False)
                     break
 
-        self.download_btn.setEnabled(True)
+        self._reset_download_btn()
         self.status_label.setText(self.get_text('error'))
+        self.set_statusbar(f"Download failed: {error[:80]}", error=True)
+
+        # If this was a batch download, remove from active set and start next in queue
+        if download_id in self._active_batch_downloads:
+            self._active_batch_downloads.discard(download_id)
+            self._flush_download_queue()
 
         if 'ffmpeg' in error.lower():
             QMessageBox.critical(self, "FFmpeg Error",
@@ -2339,6 +3131,8 @@ class BalkGrabGrabber(QMainWindow):
             if filepath and os.path.exists(filepath):
                 log.info(f"▶️ Playing: {filepath}")
 
+                # Stop all other audio first
+                self.stop_all_audio()
                 self.media_player.setSource(QUrl.fromLocalFile(filepath))
                 self.media_player.play()
 
@@ -2349,23 +3143,52 @@ class BalkGrabGrabber(QMainWindow):
                 log.warning(f"File not found: {filepath}")
                 QMessageBox.warning(self, "File Not Found", f"Cannot find: {filepath}")
 
+    def on_table_btn_clicked(self, download_id: str, btn: QPushButton):
+        """Dispatch table action button click based on current btn_state"""
+        state = btn.property("btn_state") or "idle"
+        if state == "downloading":
+            self._cancel_single_download(download_id, btn)
+        else:
+            self.toggle_download_play(download_id, btn)
+
+    def _cancel_single_download(self, download_id: str, btn: QPushButton):
+        """Cancel an in-progress download via the table button"""
+        if download_id in self.download_workers:
+            self.download_workers[download_id].cancel()
+            log.info(f"✕ Cancelled download: {download_id}")
+
+        btn.setText("▶ Play")
+        btn.setProperty("btn_state", "idle")
+        btn.setStyleSheet("")
+        btn.setEnabled(False)
+
+        for row in range(self.downloads_table.rowCount()):
+            item = self.downloads_table.item(row, 0)
+            if item and item.data(Qt.UserRole) == download_id:
+                status_item = self.downloads_table.item(row, 2)
+                if status_item:
+                    status_item.setText("Cancelled")
+                    status_item.setForeground(QColor("#888888"))
+                break
+
+        if download_id in self._active_batch_downloads:
+            self._active_batch_downloads.discard(download_id)
+            self._flush_download_queue()
+
+        if self._active_download_id == download_id:
+            self._reset_download_btn()
+            self.set_statusbar("Download cancelled")
+
     def toggle_download_play(self, download_id: str, btn: QPushButton):
         """Toggle play/stop for a download item"""
-        is_playing = btn.property("is_playing")
+        state = btn.property("btn_state") or "idle"
 
-        if is_playing:
+        if state == "playing":
             # Stop playback
             self.stop_playback()
-            btn.setText("▶ Play")
-            btn.setProperty("is_playing", False)
-            self.current_playing_download_id = None
-            self.current_playing_btn = None
         else:
-            # Stop any currently playing download first
-            if self.current_playing_btn and self.current_playing_btn != btn:
-                self.current_playing_btn.setText("▶ Play")
-                self.current_playing_btn.setProperty("is_playing", False)
-                self.stop_playback()
+            # Stop ALL audio first (preview + any other download)
+            self.stop_all_audio()
 
             # Start playback
             if download_id in self.downloads:
@@ -2378,7 +3201,7 @@ class BalkGrabGrabber(QMainWindow):
                         self.kill_external_player()
                         self.play_video_external(filepath, download.title)
                         btn.setText("⏹ Stop")
-                        btn.setProperty("is_playing", True)
+                        btn.setProperty("btn_state", "playing")
                         self.current_playing_download_id = download_id
                         self.current_playing_btn = btn
                     else:
@@ -2391,14 +3214,23 @@ class BalkGrabGrabber(QMainWindow):
                         self.position_timer.start(1000)
 
                         btn.setText("⏹ Stop")
-                        btn.setProperty("is_playing", True)
+                        btn.setProperty("btn_state", "playing")
                         self.current_playing_download_id = download_id
                         self.current_playing_btn = btn
                 else:
                     QMessageBox.warning(self, "File Not Found", f"Cannot find: {filepath}")
 
+    def stop_all_audio(self):
+        """Stop ALL audio sources - preview, downloads player, external player"""
+        # Stop preview if playing
+        if self.preview_is_playing:
+            self.stop_preview()
+
+        # Stop downloads player
+        self.stop_playback()
+
     def stop_playback(self):
-        """Stop playback"""
+        """Stop downloads playback"""
         # Kill external player if running
         self.kill_external_player()
 
@@ -2413,7 +3245,7 @@ class BalkGrabGrabber(QMainWindow):
         # Reset table button if playing from downloads
         if self.current_playing_btn:
             self.current_playing_btn.setText("▶ Play")
-            self.current_playing_btn.setProperty("is_playing", False)
+            self.current_playing_btn.setProperty("btn_state", "idle")
             self.current_playing_btn = None
             self.current_playing_download_id = None
 
@@ -2439,6 +3271,12 @@ class BalkGrabGrabber(QMainWindow):
             self.external_player_process = subprocess.Popen([video_player, filepath])
             log.info(f"▶️ Playing video in {video_player}: {title}")
             self.now_playing_label.setText(f"{self.get_text('now_playing')} {title}")
+
+            # Monitor external player so we reset button when it closes
+            if not hasattr(self, '_ext_player_timer'):
+                self._ext_player_timer = QTimer(self)
+                self._ext_player_timer.timeout.connect(self._check_external_player)
+            self._ext_player_timer.start(1000)
         except Exception as e:
             log.error(f"Failed to launch video player: {e}")
             QMessageBox.critical(self, "Error", f"Failed to launch video player:\n{e}")
@@ -2456,6 +3294,28 @@ class BalkGrabGrabber(QMainWindow):
                     pass
             self.external_player_process = None
             log.info("Killed external player")
+
+    def _check_external_player(self):
+        """Check if external player has exited and reset button state"""
+        if self.external_player_process is None:
+            if hasattr(self, '_ext_player_timer'):
+                self._ext_player_timer.stop()
+            return
+
+        retcode = self.external_player_process.poll()
+        if retcode is not None:
+            # Player has exited
+            self.external_player_process = None
+            if hasattr(self, '_ext_player_timer'):
+                self._ext_player_timer.stop()
+            log.info("External player closed, resetting button state")
+            # Reset the play button in downloads table
+            if self.current_playing_btn:
+                self.current_playing_btn.setText("▶ Play")
+                self.current_playing_btn.setProperty("btn_state", "idle")
+                self.current_playing_btn = None
+                self.current_playing_download_id = None
+            self.now_playing_label.setText(f"{self.get_text('now_playing')} {self.get_text('nothing_playing')}")
 
     def select_external_player(self, player_type: str = "video") -> str:
         """Show dialog to select external player"""
@@ -2573,7 +3433,7 @@ class BalkGrabGrabber(QMainWindow):
         """Reset the current playing button to Play state"""
         if self.current_playing_btn:
             self.current_playing_btn.setText("▶ Play")
-            self.current_playing_btn.setProperty("is_playing", False)
+            self.current_playing_btn.setProperty("btn_state", "idle")
             self.current_playing_btn = None
             self.current_playing_download_id = None
 
@@ -2603,13 +3463,176 @@ class BalkGrabGrabber(QMainWindow):
         """Open downloads folder"""
         QDesktopServices.openUrl(QUrl.fromLocalFile(self.output_path))
 
+    def show_download_context_menu(self, pos):
+        """Show right-click context menu for downloads table"""
+        row = self.downloads_table.rowAt(pos.y())
+        if row < 0:
+            return
+
+        item = self.downloads_table.item(row, 0)
+        if not item:
+            return
+
+        download_id = item.data(Qt.UserRole)
+        if download_id not in self.downloads:
+            return
+
+        download = self.downloads[download_id]
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background-color: #2b2b2b; color: #ffffff; border: 1px solid #404040; padding: 4px; }
+            QMenu::item { padding: 6px 20px; }
+            QMenu::item:selected { background-color: #1a3d2a; }
+            QMenu::separator { height: 1px; background: #404040; margin: 4px 8px; }
+        """)
+
+        file_exists = download.filepath and os.path.exists(download.filepath)
+        is_done = download.status == 'done'
+
+        # Play
+        play_action = menu.addAction(f"▶ {self.get_text('ctx_play')}")
+        play_action.setEnabled(file_exists and is_done)
+        play_action.triggered.connect(lambda: self._ctx_play(download_id, row))
+
+        menu.addSeparator()
+
+        # Open containing folder
+        open_action = menu.addAction(f"📂 {self.get_text('ctx_open_folder')}")
+        open_action.setEnabled(file_exists)
+        open_action.triggered.connect(lambda: self._ctx_open_folder(download))
+
+        # Download again
+        again_action = menu.addAction(f"⬇ {self.get_text('ctx_download_again')}")
+        again_action.setEnabled(bool(download.url))
+        again_action.triggered.connect(lambda: self._ctx_download_again(download))
+
+        menu.addSeparator()
+
+        # Convert to submenu
+        convert_menu = menu.addMenu(f"🔄 {self.get_text('ctx_convert_to')}")
+        convert_menu.setStyleSheet(menu.styleSheet())
+        convert_menu.setEnabled(file_exists and is_done)
+        for fmt in ['MP3', 'MP4', 'FLAC', 'WAV', 'OGG', 'AAC']:
+            action = convert_menu.addAction(fmt)
+            action.triggered.connect(lambda checked, f=fmt: self._ctx_convert(download, f))
+
+        menu.addSeparator()
+
+        # Remove from list
+        remove_action = menu.addAction(f"🗑 {self.get_text('ctx_remove')}")
+        remove_action.triggered.connect(lambda: self._ctx_remove(download_id, row))
+
+        menu.exec(self.downloads_table.viewport().mapToGlobal(pos))
+
+    def _ctx_play(self, download_id: str, row: int):
+        """Context menu: Play downloaded file"""
+        play_btn = self.downloads_table.cellWidget(row, 3)
+        if play_btn:
+            self.toggle_download_play(download_id, play_btn)
+
+    def _ctx_open_folder(self, download: DownloadItem):
+        """Context menu: Open containing folder"""
+        if download.filepath and os.path.exists(download.filepath):
+            folder = os.path.dirname(download.filepath)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
+    def _ctx_download_again(self, download: DownloadItem):
+        """Context menu: Download again - switch to Search tab with URL"""
+        if download.url:
+            self.tab_widget.setCurrentIndex(0)
+            self.search_input.setText(download.url)
+            self.search_input.setFocus()
+            self.do_search()
+
+    def _ctx_convert(self, download: DownloadItem, target_fmt: str):
+        """Context menu: Convert file using FFmpeg (background process with QTimer polling)"""
+        if not download.filepath or not os.path.exists(download.filepath):
+            return
+
+        import subprocess
+
+        source = download.filepath
+        base, _ = os.path.splitext(source)
+        ext = target_fmt.lower()
+        dest = f"{base}.{ext}"
+
+        # Don't convert to same format
+        if source.lower().endswith(f".{ext}"):
+            self.set_statusbar(f"Already in {target_fmt} format", error=True)
+            return
+
+        # Avoid overwriting
+        if os.path.exists(dest):
+            counter = 1
+            while os.path.exists(f"{base}_{counter}.{ext}"):
+                counter += 1
+            dest = f"{base}_{counter}.{ext}"
+
+        self.set_statusbar(self.get_text('converting_file', fmt=target_fmt))
+        log.info(f"Converting: {source} → {dest}")
+
+        cmd = ['ffmpeg', '-i', source, '-y']
+        if ext == 'mp3':
+            cmd.extend(['-codec:a', 'libmp3lame', '-b:a', '320k'])
+        elif ext == 'aac':
+            cmd.extend(['-codec:a', 'aac', '-b:a', '256k'])
+        elif ext == 'flac':
+            cmd.extend(['-codec:a', 'flac'])
+        elif ext == 'wav':
+            cmd.extend(['-codec:a', 'pcm_s16le'])
+        elif ext == 'ogg':
+            cmd.extend(['-codec:a', 'libvorbis', '-b:a', '256k'])
+        elif ext == 'mp4':
+            cmd.extend(['-codec:v', 'copy', '-codec:a', 'copy'])
+        cmd.append(dest)
+
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            self.set_statusbar("FFmpeg not found - please install FFmpeg", error=True)
+            return
+
+        # Poll for completion with QTimer
+        timer = QTimer(self)
+        def check_done():
+            if proc.poll() is not None:
+                timer.stop()
+                if proc.returncode == 0:
+                    self.set_statusbar(self.get_text('conversion_done', fmt=target_fmt))
+                    log.info(f"Conversion complete: {dest}")
+                else:
+                    stderr = proc.stderr.read().decode(errors='replace')[-200:] if proc.stderr else ""
+                    self.set_statusbar(self.get_text('conversion_failed', error=stderr[:100]), error=True)
+                    log.error(f"Conversion failed: {stderr}")
+        timer.timeout.connect(check_done)
+        timer.start(500)
+        self._convert_timer = timer
+        self._convert_proc = proc
+
+    def _ctx_remove(self, download_id: str, row: int):
+        """Context menu: Remove download from list"""
+        # Stop playback if this item is playing
+        if self.current_playing_download_id == download_id:
+            self.stop_playback()
+
+        self.downloads_table.removeRow(row)
+        if download_id in self.downloads:
+            del self.downloads[download_id]
+        self.save_downloads()
+
+        if self.downloads_table.rowCount() == 0:
+            self.downloads_table.hide()
+            self.downloads_placeholder.show()
+
+        log.info(f"Removed download: {download_id}")
+
     def closeEvent(self, event):
         """Handle close event"""
         if self.settings.value("minimize_to_tray", False, type=bool) and self.tray_icon and self.tray_icon.isVisible():
-            # Stop music even when hiding to tray
-            self.kill_external_player()
-            self.media_player.stop()
-            self.preview_player.stop()
+            if not self.settings.value("continue_playing_tray", False, type=bool):
+                self.kill_external_player()
+                self.media_player.stop()
+                self.preview_player.stop()
             event.ignore()
             self.hide()
         else:
@@ -2658,7 +3681,7 @@ def main():
     app.setOrganizationName("BalkGrab")
 
     # Set application icon
-    icon_path = os.path.join(APP_DIR, "Icons", "icon_256x256.png")
+    icon_path = os.path.join(APP_DIR, "Icons", ICON_DIR, "icon_256x256.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
