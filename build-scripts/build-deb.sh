@@ -6,7 +6,7 @@
 set -e
 
 APP_NAME="balkgrab"
-APP_VERSION="0.3.0"
+APP_VERSION="0.3.1"
 ARCH="amd64"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
