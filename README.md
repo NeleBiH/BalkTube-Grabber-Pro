@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-0.3.1-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/python-3.9+-blue?style=for-the-badge&logo=python" alt="Python"/>
   <img src="https://img.shields.io/badge/PySide6-Qt-41CD52?style=for-the-badge&logo=qt" alt="PySide6"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/platform-Linux%20|%20Windows-lightgrey?style=for-the-badge&logo=linux" alt="Platform"/>
+  <img src="https://img.shields.io/badge/platform-Linux-lightgrey?style=for-the-badge&logo=linux" alt="Platform"/>
   <br>
   <img src="https://img.shields.io/badge/Built_with-Claude_Code_AI-blueviolet?style=for-the-badge&logo=anthropic" alt="Built with Claude Code"/>
 </p>
@@ -86,24 +86,14 @@ No installation needed - fully self-contained. Note: no menu entry or desktop in
 
 ### Linux - Packages
 
-- **Debian / Ubuntu / Mint:** Download `balkgrab_0.3.0_amd64.deb`
+- **Debian / Ubuntu / Mint:** Download `balkgrab_0.3.1_amd64.deb`
   ```bash
-  sudo apt install ./balkgrab_0.3.0_amd64.deb
+  sudo apt install ./balkgrab_0.3.1_amd64.deb
   ```
-- **Fedora / openSUSE:** Download `balkgrab-0.3.0-1.x86_64.rpm`
+- **Fedora / openSUSE:** Download `balkgrab-0.3.1-1.x86_64.rpm`
   ```bash
-  sudo dnf install balkgrab-0.3.0-1.x86_64.rpm
+  sudo dnf install balkgrab-0.3.1-1.x86_64.rpm
   ```
-
-### Windows
-
-Download **BalkGrab-windows.zip** from the [Releases](https://github.com/NeleBiH/BalkGrab/releases) page and extract it.
-
-The archive contains:
-- `BalkGrab.exe` - The application
-- `ffmpeg.exe` + `ffprobe.exe` - Bundled, no separate install needed
-
-Double-click `BalkGrab.exe` to start. Keep all files in the same folder.
 
 ### From Source
 
@@ -196,7 +186,6 @@ Make sure ffmpeg is available:
 ```bash
 ffmpeg -version
 ```
-On Windows, `ffmpeg.exe` must be in the same folder as `BalkGrab.exe`.
 
 ### Video won't play (Linux)
 
