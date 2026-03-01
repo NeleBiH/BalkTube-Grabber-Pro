@@ -488,7 +488,7 @@ class DownloadItem:
     """Represents a single download"""
     def __init__(self, url: str, title: str, output_path: str,
                  format_type: str, quality: str):
-        self.id = f"{datetime.now().strftime('%H%M%S')}_{hash(url) % 10000}"
+        self.id = f"{datetime.now().strftime('%H%M%S%f')}_{hash(url) % 10000}"
         self.url = url
         self.title = title
         self.output_path = output_path
@@ -856,6 +856,7 @@ class BalkGrabGrabber(QMainWindow):
         self._thumbnail_loaded = 0  # Thumbnails loaded so far
         self._download_queue: List[str] = []  # Queue of pending batch download IDs
         self._active_batch_downloads: set = set()  # Currently running batch download IDs
+        self._download_row_map: Dict[str, int] = {}  # download_id -> table row for O(1) lookup
 
         # Preview player for streaming
         self.preview_player = QMediaPlayer()
@@ -1551,7 +1552,6 @@ class BalkGrabGrabber(QMainWindow):
         self.downloads_table.setColumnWidth(1, 200)
         self.downloads_table.setColumnWidth(2, 80)
         self.downloads_table.setColumnWidth(3, 120)
-        self.downloads_table.setColumnWidth(3, 120)
         self.downloads_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.downloads_table.verticalHeader().setVisible(False)
         self.downloads_table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -2114,6 +2114,9 @@ class BalkGrabGrabber(QMainWindow):
         query = self.search_input.text().strip()
         log.info(f"🔍 Search: '{query}'")
 
+        # Clear any error from previous search
+        self._last_fetch_error = None
+
         if not query:
             QMessageBox.warning(self, "Empty Search", "Please enter something to search!")
             return
@@ -2419,6 +2422,9 @@ class BalkGrabGrabber(QMainWindow):
         self.load_more_btn.setEnabled(True)
         self.load_more_btn.setText(self.get_text('load_more'))
         self.current_videos = videos
+        for _tw in self.thumbnail_workers:
+            _tw.quit()
+            _tw.wait(300)
         self.thumbnail_workers.clear()
         self.results_list.clear()
 
@@ -2443,7 +2449,7 @@ class BalkGrabGrabber(QMainWindow):
         for i, video in enumerate(videos):
             item = QListWidgetItem()
             widget = VideoItemWidget(video)
-            item.setSizeHint(QSize(self.results_list.width() - 30, 110))
+            item.setSizeHint(QSize(max(200, self.results_list.width() - 30), 110))
             item.setData(Qt.UserRole, i)
             self.results_list.addItem(item)
             self.results_list.setItemWidget(item, widget)
@@ -2603,14 +2609,18 @@ class BalkGrabGrabber(QMainWindow):
 
     def _flush_download_queue(self):
         """Start downloads from queue up to the simultaneous downloads limit"""
-        max_concurrent = self.settings.value("simultaneous_downloads", 2, type=int)
-        active_count = len([
-            did for did in self._active_batch_downloads
-            if did in self.download_workers and self.download_workers[did].isRunning()
-        ])
+        max_concurrent = max(1, min(10, self.settings.value("simultaneous_downloads", 2, type=int)))
         cookies_browser = self.settings.value("cookies_browser", "", type=str)
 
-        while self._download_queue and active_count < max_concurrent:
+        while self._download_queue:
+            # Recount each iteration — handles concurrent completions between iterations
+            active_count = len([
+                did for did in self._active_batch_downloads
+                if did in self.download_workers and self.download_workers[did].isRunning()
+            ])
+            if active_count >= max_concurrent:
+                break
+
             download_id = self._download_queue.pop(0)
             if download_id in self.downloads:
                 download = self.downloads[download_id]
@@ -2618,7 +2628,6 @@ class BalkGrabGrabber(QMainWindow):
                 self.download_workers[download_id] = worker
                 self._active_batch_downloads.add(download_id)
                 worker.start()
-                active_count += 1
                 log.info(f"⬇️ Starting queued download: {download.title}")
 
         if self._download_queue:
@@ -2786,14 +2795,16 @@ class BalkGrabGrabber(QMainWindow):
             self.preview_play_btn.setEnabled(False)
             self.status_label.setText("Refreshing stream...")
 
-            # Re-fetch fresh stream URL
-            url = self.selected_video.get('url', '')
-            if not url:
-                video_id = self.selected_video.get('id', '')
-                if video_id:
-                    url = f"https://www.youtube.com/watch?v={video_id}"
-            if url:
-                threading.Thread(target=self._fetch_stream_url, args=(url,), daemon=True).start()
+            # Re-fetch fresh stream URL — snapshot selected_video on GUI thread to avoid race
+            _sv = self.selected_video
+            if _sv:
+                url = _sv.get('url', '')
+                if not url:
+                    video_id = _sv.get('id', '')
+                    if video_id:
+                        url = f"https://www.youtube.com/watch?v={video_id}"
+                if url:
+                    threading.Thread(target=self._fetch_stream_url, args=(url,), daemon=True).start()
 
         elif status == QMediaPlayer.MediaStatus.LoadedMedia and self._preview_auto_refreshing:
             # Fresh URL loaded, seek to where we left off
@@ -2829,7 +2840,7 @@ class BalkGrabGrabber(QMainWindow):
     def do_download(self):
         """Start or stop download (dynamic button)"""
         # If download is active, stop it
-        if hasattr(self, '_active_download_id') and self._active_download_id:
+        if self._active_download_id:
             self.stop_active_download()
             return
 
@@ -2878,7 +2889,7 @@ class BalkGrabGrabber(QMainWindow):
 
     def stop_active_download(self):
         """Stop the currently active download"""
-        if not hasattr(self, '_active_download_id') or not self._active_download_id:
+        if not self._active_download_id:
             return
 
         download_id = self._active_download_id
@@ -2956,44 +2967,53 @@ class BalkGrabGrabber(QMainWindow):
             play_btn.setStyleSheet("color: #ff8800; font-weight: bold;")
 
         self.downloads_table.setRowHeight(row, 55)
+        self._download_row_map[download.id] = row
+
+    def _rebuild_row_map(self):
+        """Rebuild the download_id→row map after row removals."""
+        self._download_row_map.clear()
+        for r in range(self.downloads_table.rowCount()):
+            item = self.downloads_table.item(r, 0)
+            if item:
+                did = item.data(Qt.UserRole)
+                if did:
+                    self._download_row_map[did] = r
 
     @Slot(str, float, str)
     def on_download_progress(self, download_id: str, percent: float, status: str):
         """Handle download progress"""
         if download_id in self.downloads:
-            self.downloads[download_id].progress = percent
-            self.downloads[download_id].status = status
+            dl = self.downloads[download_id]
+            dl.progress = percent
+            dl.status = status
 
-            # Update table
-            for row in range(self.downloads_table.rowCount()):
-                item = self.downloads_table.item(row, 0)
-                if item and item.data(Qt.UserRole) == download_id:
-                    progress_bar = self.downloads_table.cellWidget(row, 1)
-                    if progress_bar:
-                        progress_bar.setValue(int(percent))
+            # O(1) table update via row map
+            row = self._download_row_map.get(download_id)
+            if row is not None:
+                progress_bar = self.downloads_table.cellWidget(row, 1)
+                if progress_bar:
+                    progress_bar.setValue(int(percent))
 
-                    status_item = self.downloads_table.item(row, 2)
-                    if status_item:
-                        if status == "downloading":
-                            status_item.setText("Downloading...")
-                            status_item.setForeground(QColor("#00ff88"))
-                        elif status == "processing":
-                            title_item = self.downloads_table.item(row, 0)
-                            fmt = title_item.data(Qt.UserRole + 1) if title_item else "audio"
-                            if fmt == "audio":
-                                status_item.setText("Converting...")
-                            else:
-                                status_item.setText("Merging...")
-                            status_item.setForeground(QColor("#ffaa00"))
-                    break
+                status_item = self.downloads_table.item(row, 2)
+                if status_item:
+                    if status == "downloading":
+                        status_item.setText("Downloading...")
+                        status_item.setForeground(QColor("#00ff88"))
+                    elif status == "processing":
+                        title_item = self.downloads_table.item(row, 0)
+                        fmt = title_item.data(Qt.UserRole + 1) if title_item else "audio"
+                        if fmt == "audio":
+                            status_item.setText("Converting...")
+                        else:
+                            status_item.setText("Merging...")
+                        status_item.setForeground(QColor("#ffaa00"))
 
             # Update main progress bar
             self.progress_bar.setValue(int(percent))
             self.status_label.setText(self.get_text('downloading', percent=percent))
-            title = self.downloads[download_id].title[:40]
+            title = dl.title[:40]
             if status == "processing":
-                fmt = self.downloads[download_id].format_type if download_id in self.downloads else "audio"
-                if fmt == "audio":
+                if dl.format_type == "audio":
                     self.set_statusbar(f"Converting audio: {title}...")
                 else:
                     self.set_statusbar(f"Merging video: {title}...")
@@ -3009,39 +3029,43 @@ class BalkGrabGrabber(QMainWindow):
             self.downloads[download_id].status = "done"
             self.downloads[download_id].filepath = filepath
 
-            # Update table
-            for row in range(self.downloads_table.rowCount()):
-                item = self.downloads_table.item(row, 0)
-                if item and item.data(Qt.UserRole) == download_id:
-                    progress_bar = self.downloads_table.cellWidget(row, 1)
-                    if progress_bar:
-                        progress_bar.setValue(100)
+            # O(1) table update via row map
+            row = self._download_row_map.get(download_id)
+            if row is not None:
+                progress_bar = self.downloads_table.cellWidget(row, 1)
+                if progress_bar:
+                    progress_bar.setValue(100)
 
-                    status_item = self.downloads_table.item(row, 2)
-                    if status_item:
-                        title_item = self.downloads_table.item(row, 0)
-                        format_type = title_item.data(Qt.UserRole + 1) if title_item else "audio"
-                        if format_type == "audio":
-                            status_item.setText("Converted")
-                            status_item.setForeground(QColor("#00ff88"))
-                        else:
-                            status_item.setText("Complete")
-                            status_item.setForeground(QColor("#00aaff"))
+                status_item = self.downloads_table.item(row, 2)
+                if status_item:
+                    title_item = self.downloads_table.item(row, 0)
+                    format_type = title_item.data(Qt.UserRole + 1) if title_item else "audio"
+                    if format_type == "audio":
+                        status_item.setText("Converted")
+                        status_item.setForeground(QColor("#00ff88"))
+                    else:
+                        status_item.setText("Complete")
+                        status_item.setForeground(QColor("#00aaff"))
 
-                    play_btn = self.downloads_table.cellWidget(row, 3)
-                    if play_btn:
-                        play_btn.setText("▶ Play")
-                        play_btn.setProperty("btn_state", "idle")
-                        play_btn.setStyleSheet("")
-                        play_btn.setEnabled(True)
-                    break
+                play_btn = self.downloads_table.cellWidget(row, 3)
+                if play_btn:
+                    play_btn.setText("▶ Play")
+                    play_btn.setProperty("btn_state", "idle")
+                    play_btn.setStyleSheet("")
+                    play_btn.setEnabled(True)
+
+        # Clean up worker
+        _worker = self.download_workers.pop(download_id, None)
+        if _worker:
+            _worker.deleteLater()
 
         # Re-enable download button
         self._reset_download_btn()
         self.progress_bar.setValue(100)
         self.status_label.setText(self.get_text('done'))
-        title = self.downloads[download_id].title[:50] if download_id in self.downloads else ""
-        format_type = self.downloads[download_id].format_type if download_id in self.downloads else "audio"
+        _dl = self.downloads.get(download_id)
+        title = _dl.title[:50] if _dl else ""
+        format_type = _dl.format_type if _dl else "video"
         if format_type == "audio":
             self.set_statusbar(f"Download and conversion complete: {title}")
             notif_title = "Download & Conversion Complete"
@@ -3053,7 +3077,7 @@ class BalkGrabGrabber(QMainWindow):
         if self.settings.value("notifications", True, type=bool) and self.tray_icon:
             self.tray_icon.showMessage(
                 notif_title,
-                f"{self.downloads[download_id].title}",
+                title,
                 QSystemTrayIcon.Information,
                 3000
             )
@@ -3088,20 +3112,24 @@ class BalkGrabGrabber(QMainWindow):
             self.downloads[download_id].status = "error"
             self.downloads[download_id].error_message = error
 
-            for row in range(self.downloads_table.rowCount()):
-                item = self.downloads_table.item(row, 0)
-                if item and item.data(Qt.UserRole) == download_id:
-                    status_item = self.downloads_table.item(row, 2)
-                    if status_item:
-                        status_item.setText("Failed")
-                        status_item.setForeground(QColor("#ff4444"))
-                    play_btn = self.downloads_table.cellWidget(row, 3)
-                    if play_btn:
-                        play_btn.setText("▶ Play")
-                        play_btn.setProperty("btn_state", "idle")
-                        play_btn.setStyleSheet("")
-                        play_btn.setEnabled(False)
-                    break
+            # O(1) table update via row map
+            row = self._download_row_map.get(download_id)
+            if row is not None:
+                status_item = self.downloads_table.item(row, 2)
+                if status_item:
+                    status_item.setText("Failed")
+                    status_item.setForeground(QColor("#ff4444"))
+                play_btn = self.downloads_table.cellWidget(row, 3)
+                if play_btn:
+                    play_btn.setText("▶ Play")
+                    play_btn.setProperty("btn_state", "idle")
+                    play_btn.setStyleSheet("")
+                    play_btn.setEnabled(False)
+
+        # Clean up worker
+        _worker = self.download_workers.pop(download_id, None)
+        if _worker:
+            _worker.deleteLater()
 
         self._reset_download_btn()
         self.status_label.setText(self.get_text('error'))
@@ -3162,14 +3190,12 @@ class BalkGrabGrabber(QMainWindow):
         btn.setStyleSheet("")
         btn.setEnabled(False)
 
-        for row in range(self.downloads_table.rowCount()):
-            item = self.downloads_table.item(row, 0)
-            if item and item.data(Qt.UserRole) == download_id:
-                status_item = self.downloads_table.item(row, 2)
-                if status_item:
-                    status_item.setText("Cancelled")
-                    status_item.setForeground(QColor("#888888"))
-                break
+        row = self._download_row_map.get(download_id)
+        if row is not None:
+            status_item = self.downloads_table.item(row, 2)
+            if status_item:
+                status_item.setText("Cancelled")
+                status_item.setForeground(QColor("#888888"))
 
         if download_id in self._active_batch_downloads:
             self._active_batch_downloads.discard(download_id)
@@ -3268,7 +3294,11 @@ class BalkGrabGrabber(QMainWindow):
 
         # Launch external player
         try:
-            self.external_player_process = subprocess.Popen([video_player, filepath])
+            self.external_player_process = subprocess.Popen(
+                [video_player, filepath],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
             log.info(f"▶️ Playing video in {video_player}: {title}")
             self.now_playing_label.setText(f"{self.get_text('now_playing')} {title}")
 
@@ -3453,6 +3483,9 @@ class BalkGrabGrabber(QMainWindow):
         for row in reversed(rows_to_remove):
             self.downloads_table.removeRow(row)
 
+        if rows_to_remove:
+            self._rebuild_row_map()
+
         if self.downloads_table.rowCount() == 0:
             self.downloads_table.hide()
             self.downloads_placeholder.show()
@@ -3549,6 +3582,17 @@ class BalkGrabGrabber(QMainWindow):
         if not download.filepath or not os.path.exists(download.filepath):
             return
 
+        # Stop any previous conversion timer/process
+        if hasattr(self, '_convert_timer') and self._convert_timer:
+            self._convert_timer.stop()
+            self._convert_timer = None
+        if hasattr(self, '_convert_proc') and self._convert_proc:
+            try:
+                self._convert_proc.terminate()
+            except Exception:
+                pass
+            self._convert_proc = None
+
         import subprocess
 
         source = download.filepath
@@ -3601,7 +3645,11 @@ class BalkGrabGrabber(QMainWindow):
                     self.set_statusbar(self.get_text('conversion_done', fmt=target_fmt))
                     log.info(f"Conversion complete: {dest}")
                 else:
-                    stderr = proc.stderr.read().decode(errors='replace')[-200:] if proc.stderr else ""
+                    if proc.stderr:
+                        stderr = proc.stderr.read().decode(errors='replace')[-200:]
+                        proc.stderr.close()
+                    else:
+                        stderr = ""
                     self.set_statusbar(self.get_text('conversion_failed', error=stderr[:100]), error=True)
                     log.error(f"Conversion failed: {stderr}")
         timer.timeout.connect(check_done)
@@ -3618,6 +3666,7 @@ class BalkGrabGrabber(QMainWindow):
         self.downloads_table.removeRow(row)
         if download_id in self.downloads:
             del self.downloads[download_id]
+        self._rebuild_row_map()
         self.save_downloads()
 
         if self.downloads_table.rowCount() == 0:
@@ -3638,6 +3687,26 @@ class BalkGrabGrabber(QMainWindow):
         else:
             # Kill external player (mpv/vlc) if running
             self.kill_external_player()
+
+            # Stop external player monitor timer
+            if hasattr(self, '_ext_player_timer') and self._ext_player_timer:
+                self._ext_player_timer.stop()
+
+            # Stop conversion timer and process
+            if hasattr(self, '_convert_timer') and self._convert_timer:
+                self._convert_timer.stop()
+                self._convert_timer = None
+            if hasattr(self, '_convert_proc') and self._convert_proc:
+                try:
+                    self._convert_proc.terminate()
+                except Exception:
+                    pass
+                self._convert_proc = None
+
+            # Cancel any running download workers (snapshot values to avoid mutation during iteration)
+            for worker in list(self.download_workers.values()):
+                if worker.isRunning():
+                    worker.cancel()
 
             # Stop all media players and release audio resources
             self.media_player.stop()
