@@ -595,18 +595,40 @@ class SearchWorker(QThread):
             if results and 'entries' in results:
                 videos = []
                 for i, entry in enumerate(results['entries']):
-                    if entry:
-                        video = {
-                            'id': entry.get('id', ''),
-                            'title': entry.get('title', 'Unknown'),
-                            'url': entry.get('url', f"https://www.youtube.com/watch?v={entry.get('id', '')}"),
-                            'thumbnail': entry.get('thumbnail', entry.get('thumbnails', [{}])[0].get('url', '') if entry.get('thumbnails') else ''),
-                            'duration': entry.get('duration', 0),
-                            'channel': entry.get('channel', entry.get('uploader', 'Unknown')),
-                            'view_count': entry.get('view_count', 0),
-                        }
-                        videos.append(video)
-                        log.debug(f"  [{i+1}] {video['title'][:40]}...")
+                    if not entry:
+                        continue
+                    video_id = entry.get('id', '')
+                    # Skip channel/playlist entries — yt-dlp can return channel
+                    # pages as search results (e.g. searching an artist name).
+                    # Channel IDs start with 'UC' and are 24 chars; playlists
+                    # start with 'PL'. Also check _type field.
+                    entry_type = entry.get('_type', 'url')
+                    if entry_type == 'playlist':
+                        log.debug(f"  [{i+1}] Skipping channel/playlist result: {entry.get('title', '')[:40]}")
+                        continue
+                    if video_id and (
+                        (video_id.startswith('UC') and len(video_id) == 24) or
+                        video_id.startswith('PL')
+                    ):
+                        log.debug(f"  [{i+1}] Skipping channel/playlist ID: {video_id}")
+                        continue
+                    # Always build URL from video ID — entry.get('url') from
+                    # extract_flat can be a channel URL instead of a video URL
+                    if video_id:
+                        video_url = f"https://www.youtube.com/watch?v={video_id}"
+                    else:
+                        video_url = entry.get('url', '')
+                    video = {
+                        'id': video_id,
+                        'title': entry.get('title', 'Unknown'),
+                        'url': video_url,
+                        'thumbnail': entry.get('thumbnail', entry.get('thumbnails', [{}])[0].get('url', '') if entry.get('thumbnails') else ''),
+                        'duration': entry.get('duration', 0),
+                        'channel': entry.get('channel', entry.get('uploader', 'Unknown')),
+                        'view_count': entry.get('view_count', 0),
+                    }
+                    videos.append(video)
+                    log.debug(f"  [{i+1}] {video['title'][:40]}...")
 
                 log.info(f"✅ Found {len(videos)} videos")
                 self.signals.search_results.emit(videos)
