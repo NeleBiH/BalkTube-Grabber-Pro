@@ -22,10 +22,10 @@ import requests
 import logging
 from datetime import datetime
 
-# Add deno to PATH if available (needed for yt-dlp signature solving)
-deno_path = os.path.expanduser("~/.deno/bin")
-if os.path.isdir(deno_path):
-    os.environ["PATH"] = deno_path + os.pathsep + os.environ.get("PATH", "")
+# Add deno to PATH if available (used by yt-dlp for YouTube JS challenge solving)
+_deno_path = os.path.expanduser("~/.deno/bin")
+if os.path.isdir(_deno_path) and _deno_path not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _deno_path + os.pathsep + os.environ.get("PATH", "")
 from pathlib import Path
 from typing import Optional, List, Dict
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
@@ -90,8 +90,16 @@ class ClickableSlider(QSlider):
         super().mouseReleaseEvent(event)
 
 # ============ VERSION INFO ============
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.3"
 APP_NAME = "BalkGrab"
+
+_MENU_STYLE = """
+    QMenu { background-color: #2b2b2b; color: #ffffff; border: 1px solid #404040; padding: 4px; }
+    QMenu::item { padding: 6px 20px; }
+    QMenu::item:selected { background-color: #00aa44; color: #ffffff; }
+    QMenu::item:disabled { color: #666666; }
+    QMenu::separator { height: 1px; background: #404040; margin: 4px 8px; }
+"""
 
 # ============ TRANSLATIONS ============
 TRANSLATIONS = {
@@ -142,7 +150,7 @@ TRANSLATIONS = {
         'ctx_convert_to': 'Convert to',
         'ctx_remove': 'Remove from list',
         'converting_file': 'Converting to {fmt}...',
-        'conversion_done': 'Converted to {fmt}',
+        'conversion_done': 'Converted to {fmt} — check download folder',
         'conversion_failed': 'Conversion failed: {error}',
         # Player
         'player_title': '🎵 Media Player',
@@ -159,6 +167,12 @@ TRANSLATIONS = {
         'notifications': 'Show download notifications',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Simultaneous downloads:',
+        'speed_limit': 'Download speed limit:',
+        'speed_limit_unit': 'KB/s (0 = unlimited)',
+        'embed_metadata': 'Embed metadata & cover art in audio files',
+        'open_in_browser': 'Open in browser',
+        'copy_url': 'Copy URL',
+        'copy_title': 'Copy title',
         'auto_play': 'Auto-play after download',
         'download_location': 'Download location:',
         'save_settings': '💾 Save Settings',
@@ -283,7 +297,7 @@ copies or substantial portions of the Software.</p>
         'ctx_convert_to': 'Konvertieren zu',
         'ctx_remove': 'Aus Liste entfernen',
         'converting_file': 'Konvertiere zu {fmt}...',
-        'conversion_done': 'Zu {fmt} konvertiert',
+        'conversion_done': 'Zu {fmt} konvertiert — im Download-Ordner prüfen',
         'conversion_failed': 'Konvertierung fehlgeschlagen: {error}',
         'player_title': '🎵 Mediaplayer',
         'now_playing': 'Wird abgespielt:',
@@ -298,6 +312,12 @@ copies or substantial portions of the Software.</p>
         'notifications': 'Download-Benachrichtigungen anzeigen',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Gleichzeitige Downloads:',
+        'speed_limit': 'Download-Geschwindigkeitslimit:',
+        'speed_limit_unit': 'KB/s (0 = unbegrenzt)',
+        'embed_metadata': 'Metadaten & Cover-Art in Audiodateien einbetten',
+        'open_in_browser': 'Im Browser öffnen',
+        'copy_url': 'URL kopieren',
+        'copy_title': 'Titel kopieren',
         'auto_play': 'Nach Download automatisch abspielen',
         'download_location': 'Download-Speicherort:',
         'save_settings': '💾 Einstellungen speichern',
@@ -385,10 +405,10 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'ctx_play': 'Pusti',
         'ctx_open_folder': 'Otvori mapu',
         'ctx_download_again': 'Skini ponovo',
-        'ctx_convert_to': 'Konvertuj u',
-        'ctx_remove': 'Ukloni sa liste',
-        'converting_file': 'Konvertuje se u {fmt}...',
-        'conversion_done': 'Konvertovano u {fmt}',
+        'ctx_convert_to': 'Konvertiraj u',
+        'ctx_remove': 'Ukloni s liste',
+        'converting_file': 'Konvertiranje u {fmt}...',
+        'conversion_done': 'Konvertirano u {fmt} — provjeri mapu preuzimanja',
         'conversion_failed': 'Konverzija neuspješna: {error}',
         'player_title': '🎵 Media Player',
         'now_playing': 'Sad svira:',
@@ -403,6 +423,12 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'notifications': 'Prikaži obavijesti o preuzimanju',
         'downloads_settings': 'Preuzimanja',
         'simultaneous': 'Istovremena preuzimanja:',
+        'speed_limit': 'Ograničenje brzine preuzimanja:',
+        'speed_limit_unit': 'KB/s (0 = neograničeno)',
+        'embed_metadata': 'Ugradi metapodatke i naslovnicu u audio datoteke',
+        'open_in_browser': 'Otvori u pregledniku',
+        'copy_url': 'Kopiraj URL',
+        'copy_title': 'Kopiraj naslov',
         'auto_play': 'Automatski pusti nakon preuzimanja',
         'download_location': 'Lokacija preuzimanja:',
         'save_settings': '💾 Spremi postavke',
@@ -613,16 +639,24 @@ class ThumbnailWorker(QThread):
 class DownloadWorker(QThread):
     """Thread for downloading video/audio"""
 
-    def __init__(self, download_item: DownloadItem, signals: WorkerSignals, cookies_browser: str = ""):
+    def __init__(self, download_item: DownloadItem, signals: WorkerSignals,
+                 cookies_browser: str = "", embed_metadata: bool = True, speed_limit: int = 0):
         super().__init__()
         self.item = download_item
         self.signals = signals
         self.cookies_browser = cookies_browser
+        self.embed_metadata = embed_metadata
+        self.speed_limit = speed_limit  # KB/s, 0 = unlimited
         self._cancelled = False
 
     def cancel(self):
         """Request cancellation of this download"""
         self._cancelled = True
+
+    def postprocessor_hook(self, d):
+        """Called by yt-dlp before/during each postprocessor (e.g. ffmpeg). Abort if cancelled."""
+        if self._cancelled and d.get('status') == 'started':
+            raise Exception("Download cancelled by user")
 
     def progress_hook(self, d):
         if self._cancelled:
@@ -665,20 +699,28 @@ class DownloadWorker(QThread):
 
                 codec, bitrate = audio_formats.get(self.item.quality, ('mp3', '192'))
 
+                postprocessors = [
+                    {'key': 'FFmpegExtractAudio', 'preferredcodec': codec, 'preferredquality': bitrate},
+                ]
+                if self.embed_metadata:
+                    postprocessors += [
+                        {'key': 'FFmpegMetadata', 'add_metadata': True},
+                        {'key': 'EmbedThumbnail'},
+                    ]
+
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'outtmpl': output_template,
                     'progress_hooks': [self.progress_hook],
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': codec,
-                        'preferredquality': bitrate,
-                    }],
+                    'postprocessor_hooks': [self.postprocessor_hook],
+                    'postprocessors': postprocessors,
+                    'writethumbnail': self.embed_metadata,
                     'prefer_ffmpeg': True,
-                    'remote_components': ['ejs:github'],
                     'noplaylist': True,
                     **cookies_opts,
                 }
+                if self.speed_limit > 0:
+                    ydl_opts['ratelimit'] = self.speed_limit * 1024
             else:
                 resolution_formats = {
                     'Best quality': 'bestvideo+bestaudio/best',
@@ -699,11 +741,13 @@ class DownloadWorker(QThread):
                     'format': format_str,
                     'outtmpl': output_template,
                     'progress_hooks': [self.progress_hook],
+                    'postprocessor_hooks': [self.postprocessor_hook],
                     'merge_output_format': 'mp4',
-                    'remote_components': ['ejs:github'],
                     'noplaylist': True,
                     **cookies_opts,
                 }
+                if self.speed_limit > 0:
+                    ydl_opts['ratelimit'] = self.speed_limit * 1024
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(self.item.url, download=True)
@@ -857,6 +901,12 @@ class BalkGrabGrabber(QMainWindow):
         self._download_queue: List[str] = []  # Queue of pending batch download IDs
         self._active_batch_downloads: set = set()  # Currently running batch download IDs
         self._download_row_map: Dict[str, int] = {}  # download_id -> table row for O(1) lookup
+        self._selected_count = 0  # tracks checked video count for O(1) button updates
+        self._last_fetch_error = None
+        self._ext_player_timer = None
+        self._convert_timer = None
+        self._convert_proc = None
+        self.search_worker = None
 
         # Preview player for streaming
         self.preview_player = QMediaPlayer()
@@ -869,6 +919,7 @@ class BalkGrabGrabber(QMainWindow):
         self._preview_stall_position = 0
         self._preview_last_position = -1
         self._preview_stall_count = 0
+        self._preview_temp_path = None
 
         # System tray
         self.tray_icon = None
@@ -1338,6 +1389,8 @@ class BalkGrabGrabber(QMainWindow):
         self.results_list = QListWidget()
         self.results_list.setMinimumWidth(450)
         self.results_list.itemClicked.connect(self.on_video_selected)
+        self.results_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.results_list.customContextMenuRequested.connect(self.show_video_context_menu)
         left_layout.addWidget(self.results_list)
 
         self.load_more_btn = QPushButton(self.get_text('load_more'))
@@ -1721,6 +1774,22 @@ class BalkGrabGrabber(QMainWindow):
         simultaneous_layout.addStretch()
         downloads_layout.addLayout(simultaneous_layout)
 
+        speed_layout = QHBoxLayout()
+        speed_layout.addWidget(QLabel(self.get_text('speed_limit')))
+        self.speed_limit_spin = QSpinBox()
+        self.speed_limit_spin.setRange(0, 100000)
+        self.speed_limit_spin.setSingleStep(500)
+        self.speed_limit_spin.setValue(self.settings.value("speed_limit", 0, type=int))
+        self.speed_limit_spin.setFixedWidth(90)
+        speed_layout.addWidget(self.speed_limit_spin)
+        speed_layout.addWidget(QLabel(self.get_text('speed_limit_unit')))
+        speed_layout.addStretch()
+        downloads_layout.addLayout(speed_layout)
+
+        self.embed_metadata_checkbox = QCheckBox(self.get_text('embed_metadata'))
+        self.embed_metadata_checkbox.setChecked(self.settings.value("embed_metadata", True, type=bool))
+        downloads_layout.addWidget(self.embed_metadata_checkbox)
+
         self.auto_play_checkbox = QCheckBox(self.get_text('auto_play'))
         self.auto_play_checkbox.setChecked(self.settings.value("auto_play", False, type=bool))
         downloads_layout.addWidget(self.auto_play_checkbox)
@@ -1973,6 +2042,8 @@ class BalkGrabGrabber(QMainWindow):
         self.settings.setValue("start_minimized", self.start_minimized_checkbox.isChecked())
         self.settings.setValue("notifications", self.notifications_checkbox.isChecked())
         self.settings.setValue("simultaneous_downloads", self.simultaneous_spin.value())
+        self.settings.setValue("speed_limit", self.speed_limit_spin.value())
+        self.settings.setValue("embed_metadata", self.embed_metadata_checkbox.isChecked())
         self.settings.setValue("auto_play", self.auto_play_checkbox.isChecked())
         self.settings.setValue("output_path", self.output_path)
         self.settings.setValue("cookies_browser", self.cookies_browser_combo.currentData())
@@ -2081,8 +2152,15 @@ class BalkGrabGrabber(QMainWindow):
         self.quality_combo.addItems(options)
 
     @staticmethod
+    @staticmethod
+    def is_direct_url(text: str) -> bool:
+        """Check if text is any valid URL that can be passed directly to yt-dlp"""
+        t = text.lower()
+        return t.startswith('http://') or t.startswith('https://')
+
+    @staticmethod
     def is_youtube_url(text: str) -> bool:
-        """Check if text is a valid YouTube URL (not just containing youtube in random text)"""
+        """Check if text is specifically a YouTube URL"""
         t = text.lower()
         if not (t.startswith('http://') or t.startswith('https://') or t.startswith('www.')):
             return False
@@ -2094,19 +2172,17 @@ class BalkGrabGrabber(QMainWindow):
         if text:
             self.search_input.setText(text)
             self.search_input.setFocus()
-            # Auto-search if it's a YouTube URL
-            if self.is_youtube_url(text):
+            if self.is_direct_url(text):
                 self.do_search()
 
     def on_clipboard_changed(self):
-        """Auto-detect YouTube URLs in clipboard"""
+        """Auto-detect video URLs in clipboard"""
         text = QApplication.clipboard().text().strip()
-        if text and self.is_youtube_url(text):
-            # Only intercept if search field is empty or has old content
+        if text and self.is_direct_url(text):
             current = self.search_input.text().strip()
             if current != text:
                 self.search_input.setText(text)
-                self.set_statusbar("YouTube link detected in clipboard!")
+                self.set_statusbar("Video link detected in clipboard!")
                 log.info(f"📋 Clipboard intercepted: {text[:60]}...")
 
     def do_search(self):
@@ -2121,7 +2197,7 @@ class BalkGrabGrabber(QMainWindow):
             QMessageBox.warning(self, "Empty Search", "Please enter something to search!")
             return
 
-        if 'youtube.com' in query or 'youtu.be' in query:
+        if self.is_direct_url(query):
             self.set_direct_url(query)
             return
 
@@ -2135,6 +2211,9 @@ class BalkGrabGrabber(QMainWindow):
         self.status_label.setText(self.get_text('searching'))
 
         self.set_statusbar("Searching YouTube...")
+        if self.search_worker and self.search_worker.isRunning():
+            self.search_worker.quit()
+            self.search_worker.wait(300)
         self.search_worker = SearchWorker(query, self.signals, self._search_result_count)
         self.search_worker.start()
 
@@ -2149,26 +2228,30 @@ class BalkGrabGrabber(QMainWindow):
         self.load_more_btn.setText("Loading...")
         self.search_btn.setEnabled(False)
 
+        if self.search_worker and self.search_worker.isRunning():
+            self.search_worker.quit()
+            self.search_worker.wait(300)
         self.search_worker = SearchWorker(query, self.signals, self._search_result_count)
         self.search_worker.start()
 
     def set_direct_url(self, url: str):
-        """Set direct URL as selected video, detect playlists"""
-        parsed = urlparse(url)
-        params = parse_qs(parsed.query)
+        """Set direct URL as selected video. YouTube: detect playlists. Other platforms: fetch directly."""
+        is_yt = self.is_youtube_url(url)
 
-        # Detect playlist URL - fetch playlist info in background
-        if 'list' in params or 'start_radio' in params:
-            self.results_list.clear()
-            self.load_more_btn.hide()
-            self.status_label.setText(self.get_text('playlist_loading'))
-            self.search_btn.setEnabled(False)
-            self.search_btn.setText(self.get_text('searching'))
-            self.set_statusbar("Playlist detected - fetching video list, please wait...")
-            threading.Thread(target=self.fetch_playlist_info, args=(url,), daemon=True).start()
-            return
+        if is_yt:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query)
+            if 'list' in params or 'start_radio' in params:
+                self.results_list.clear()
+                self.load_more_btn.hide()
+                self.status_label.setText(self.get_text('playlist_loading'))
+                self.search_btn.setEnabled(False)
+                self.search_btn.setText(self.get_text('searching'))
+                self.set_statusbar("Playlist detected - fetching video list, please wait...")
+                threading.Thread(target=self.fetch_playlist_info, args=(url,), daemon=True).start()
+                return
+            url = self.clean_youtube_url(url)
 
-        url = self.clean_youtube_url(url)
         self.results_list.clear()
         self.load_more_btn.hide()
         self.status_label.setText("Loading video info...")
@@ -2456,8 +2539,10 @@ class BalkGrabGrabber(QMainWindow):
 
             # Auto-check all in playlist mode, connect checkbox signal
             if self._playlist_mode:
+                widget.checkbox.blockSignals(True)
                 widget.checkbox.setChecked(True)
-            widget.checkbox.stateChanged.connect(self.update_selection_count)
+                widget.checkbox.blockSignals(False)
+            widget.checkbox.stateChanged.connect(self._on_video_checkbox_changed)
 
             if video.get('thumbnail'):
                 self._thumbnail_total += 1
@@ -2534,18 +2619,29 @@ class BalkGrabGrabber(QMainWindow):
             self.stop_preview()  # Reset preview
 
     # ============ PLAYLIST SELECTION METHODS ============
+    def _on_video_checkbox_changed(self, state):
+        """O(1) update when a single checkbox is toggled"""
+        self._selected_count += 1 if state == Qt.Checked else -1
+        self._selected_count = max(0, self._selected_count)
+        self._refresh_selection_ui()
+
+    def _refresh_selection_ui(self):
+        """Update button text and status bar from cached _selected_count"""
+        total = self.results_list.count()
+        self.set_statusbar(f"{self._selected_count} of {total} videos selected and ready to download")
+        self.download_selected_btn.setText(f"Download ({self._selected_count})")
+        self.download_selected_btn.setEnabled(self._selected_count > 0)
+
     def update_selection_count(self):
-        """Update status bar with number of selected videos"""
+        """Full O(n) recount — call after bulk changes (new results, select/deselect all)"""
         count = 0
         for row in range(self.results_list.count()):
             item = self.results_list.item(row)
             widget = self.results_list.itemWidget(item)
             if widget and isinstance(widget, VideoItemWidget) and widget.checkbox.isChecked():
                 count += 1
-        total = self.results_list.count()
-        self.set_statusbar(f"{count} of {total} videos selected and ready to download")
-        self.download_selected_btn.setText(f"Download ({count})")
-        self.download_selected_btn.setEnabled(count > 0)
+        self._selected_count = count
+        self._refresh_selection_ui()
 
     def select_all_videos(self):
         """Check all video checkboxes"""
@@ -2553,8 +2649,11 @@ class BalkGrabGrabber(QMainWindow):
             item = self.results_list.item(row)
             widget = self.results_list.itemWidget(item)
             if widget and isinstance(widget, VideoItemWidget):
+                widget.checkbox.blockSignals(True)
                 widget.checkbox.setChecked(True)
-        self.update_selection_count()
+                widget.checkbox.blockSignals(False)
+        self._selected_count = self.results_list.count()
+        self._refresh_selection_ui()
 
     def deselect_all_videos(self):
         """Uncheck all video checkboxes"""
@@ -2562,8 +2661,11 @@ class BalkGrabGrabber(QMainWindow):
             item = self.results_list.item(row)
             widget = self.results_list.itemWidget(item)
             if widget and isinstance(widget, VideoItemWidget):
+                widget.checkbox.blockSignals(True)
                 widget.checkbox.setChecked(False)
-        self.update_selection_count()
+                widget.checkbox.blockSignals(False)
+        self._selected_count = 0
+        self._refresh_selection_ui()
 
     def download_selected_videos(self):
         """Download checked videos respecting the simultaneous downloads limit"""
@@ -2606,11 +2708,15 @@ class BalkGrabGrabber(QMainWindow):
         self.set_statusbar(f"Queued {len(selected)} videos for download")
         self.save_downloads()
         log.info(f"⬇️ Batch download queued: {len(selected)} videos")
+        # Reset checkboxes and button after queueing
+        self.deselect_all_videos()
 
     def _flush_download_queue(self):
         """Start downloads from queue up to the simultaneous downloads limit"""
         max_concurrent = max(1, min(10, self.settings.value("simultaneous_downloads", 2, type=int)))
         cookies_browser = self.settings.value("cookies_browser", "", type=str)
+        embed_metadata = self.settings.value("embed_metadata", True, type=bool)
+        speed_limit = self.settings.value("speed_limit", 0, type=int)
 
         while self._download_queue:
             # Recount each iteration — handles concurrent completions between iterations
@@ -2624,7 +2730,7 @@ class BalkGrabGrabber(QMainWindow):
             download_id = self._download_queue.pop(0)
             if download_id in self.downloads:
                 download = self.downloads[download_id]
-                worker = DownloadWorker(download, self.signals, cookies_browser)
+                worker = DownloadWorker(download, self.signals, cookies_browser, embed_metadata, speed_limit)
                 self.download_workers[download_id] = worker
                 self._active_batch_downloads.add(download_id)
                 worker.start()
@@ -2666,47 +2772,43 @@ class BalkGrabGrabber(QMainWindow):
     def _fetch_stream_url(self, url: str):
         """Fetch streaming URL from YouTube"""
         try:
+            import tempfile
+            tmp_dir = tempfile.mkdtemp(prefix='balkgrab_preview_')
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
-                'remote_components': ['ejs:github'],
+                # Lowest quality audio for fast preview download
+                'format': 'bestaudio[ext=m4a][abr<=128]/bestaudio[ext=m4a]/bestaudio[abr<=128]/bestaudio/worst',
+                'outtmpl': os.path.join(tmp_dir, 'preview.%(ext)s'),
                 'noplaylist': True,
             }
             cookies_browser = self.settings.value("cookies_browser", "", type=str)
             if cookies_browser:
                 ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                # Try to get direct URL or from formats
-                stream_url = info.get('url')
-                if not stream_url and info.get('formats'):
-                    # Find best audio format with URL
-                    for fmt in reversed(info['formats']):
-                        if fmt.get('url') and fmt.get('acodec') and fmt.get('acodec') != 'none':
-                            stream_url = fmt['url']
-                            log.debug(f"Using format: {fmt.get('format_id')} - {fmt.get('acodec')}")
-                            break
-                    # Fallback to any format with URL
-                    if not stream_url:
-                        for fmt in reversed(info['formats']):
-                            if fmt.get('url'):
-                                stream_url = fmt['url']
-                                log.debug(f"Fallback format: {fmt.get('format_id')}")
-                                break
-                if stream_url:
-                    QMetaObject.invokeMethod(self, "_play_stream", Qt.QueuedConnection, Q_ARG(str, stream_url))
-                else:
-                    log.error("No stream URL found in formats")
-                    QMetaObject.invokeMethod(self, "_preview_error", Qt.QueuedConnection)
+                info = ydl.extract_info(url, download=True)
+                filepath = ydl.prepare_filename(info)
+
+            # Find the actual downloaded file (extension may differ)
+            if not os.path.exists(filepath):
+                files = [str(p) for p in Path(tmp_dir).iterdir() if p.is_file()]
+                filepath = files[0] if files else None
+
+            if filepath and os.path.exists(filepath):
+                self._preview_temp_path = tmp_dir
+                QMetaObject.invokeMethod(self, "_play_stream", Qt.QueuedConnection, Q_ARG(str, filepath))
+            else:
+                log.error("Preview temp file not found")
+                import shutil; shutil.rmtree(tmp_dir, ignore_errors=True)
+                QMetaObject.invokeMethod(self, "_preview_error", Qt.QueuedConnection)
         except Exception as e:
             log.error(f"Preview error: {e}")
             QMetaObject.invokeMethod(self, "_preview_error", Qt.QueuedConnection)
 
     @Slot(str)
     def _play_stream(self, stream_url: str):
-        """Play stream URL"""
-        self.preview_player.setSource(QUrl(stream_url))
+        """Play stream from local temp file"""
+        self.preview_player.setSource(QUrl.fromLocalFile(stream_url))
         self.preview_player.play()
         self.preview_is_playing = True
         self.preview_play_btn.setIcon(self._stop_icon)
@@ -2719,7 +2821,15 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_is_playing = False
         self._set_preview_btn_play()
         self.preview_play_btn.setEnabled(True)
+        self._cleanup_preview_temp()
         self.status_label.setText("Preview failed ❌")
+
+    def _cleanup_preview_temp(self):
+        """Delete temp preview file"""
+        if self._preview_temp_path:
+            import shutil
+            shutil.rmtree(self._preview_temp_path, ignore_errors=True)
+            self._preview_temp_path = None
 
     def stop_preview(self):
         """Stop preview"""
@@ -2728,10 +2838,12 @@ class BalkGrabGrabber(QMainWindow):
         self._preview_last_position = -1
         self._preview_stall_count = 0
         self.preview_player.stop()
+        self.preview_player.setSource(QUrl())  # release file handle before deleting
         self.preview_is_playing = False
         self._set_preview_btn_play()
         self.preview_seek_slider.setValue(0)
         self.preview_time_current.setText("0:00")
+        self._cleanup_preview_temp()
         if self.selected_video:
             self.status_label.setText(self.get_text('ready_download'))
 
@@ -2875,7 +2987,9 @@ class BalkGrabGrabber(QMainWindow):
 
         # Start worker
         cookies_browser = self.settings.value("cookies_browser", "", type=str)
-        worker = DownloadWorker(download, self.signals, cookies_browser)
+        embed_metadata = self.settings.value("embed_metadata", True, type=bool)
+        speed_limit = self.settings.value("speed_limit", 0, type=int)
+        worker = DownloadWorker(download, self.signals, cookies_browser, embed_metadata, speed_limit)
         self.download_workers[download.id] = worker
         worker.start()
 
@@ -3303,7 +3417,7 @@ class BalkGrabGrabber(QMainWindow):
             self.now_playing_label.setText(f"{self.get_text('now_playing')} {title}")
 
             # Monitor external player so we reset button when it closes
-            if not hasattr(self, '_ext_player_timer'):
+            if self._ext_player_timer is None:
                 self._ext_player_timer = QTimer(self)
                 self._ext_player_timer.timeout.connect(self._check_external_player)
             self._ext_player_timer.start(1000)
@@ -3328,7 +3442,7 @@ class BalkGrabGrabber(QMainWindow):
     def _check_external_player(self):
         """Check if external player has exited and reset button state"""
         if self.external_player_process is None:
-            if hasattr(self, '_ext_player_timer'):
+            if self._ext_player_timer is not None:
                 self._ext_player_timer.stop()
             return
 
@@ -3336,7 +3450,7 @@ class BalkGrabGrabber(QMainWindow):
         if retcode is not None:
             # Player has exited
             self.external_player_process = None
-            if hasattr(self, '_ext_player_timer'):
+            if self._ext_player_timer is not None:
                 self._ext_player_timer.stop()
             log.info("External player closed, resetting button state")
             # Reset the play button in downloads table
@@ -3409,7 +3523,7 @@ class BalkGrabGrabber(QMainWindow):
         try:
             os.makedirs(os.path.dirname(config_file), exist_ok=True)
             with open(config_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2)
+                json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             log.error(f"Failed to save config: {e}")
 
@@ -3496,6 +3610,53 @@ class BalkGrabGrabber(QMainWindow):
         """Open downloads folder"""
         QDesktopServices.openUrl(QUrl.fromLocalFile(self.output_path))
 
+    def show_video_context_menu(self, pos):
+        """Right-click context menu on search results list"""
+        item = self.results_list.itemAt(pos)
+        if not item:
+            return
+        widget = self.results_list.itemWidget(item)
+        if not widget or not isinstance(widget, VideoItemWidget):
+            return
+
+        video = widget.video_data
+        url = video.get('url') or ''
+        if not url:
+            video_id = video.get('id', '')
+            if video_id:
+                url = f"https://www.youtube.com/watch?v={video_id}"
+        title = video.get('title', '')
+
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_STYLE)
+
+        dl_action = menu.addAction('⬇️  ' + self.get_text('download_btn'))
+        dl_action.setEnabled(bool(url))
+        dl_action.triggered.connect(lambda: self._ctx_download_video(video))
+
+        menu.addSeparator()
+
+        copy_url_action = menu.addAction('🔗  ' + self.get_text('copy_url'))
+        copy_url_action.setEnabled(bool(url))
+        copy_url_action.triggered.connect(lambda: QApplication.clipboard().setText(url))
+
+        copy_title_action = menu.addAction('📋  ' + self.get_text('copy_title'))
+        copy_title_action.setEnabled(bool(title))
+        copy_title_action.triggered.connect(lambda: QApplication.clipboard().setText(title))
+
+        menu.addSeparator()
+
+        open_action = menu.addAction('🌐  ' + self.get_text('open_in_browser'))
+        open_action.setEnabled(bool(url))
+        open_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+
+        menu.exec(self.results_list.viewport().mapToGlobal(pos))
+
+    def _ctx_download_video(self, video: dict):
+        """Start download for a video from context menu"""
+        self.selected_video = video
+        self.do_download()
+
     def show_download_context_menu(self, pos):
         """Show right-click context menu for downloads table"""
         row = self.downloads_table.rowAt(pos.y())
@@ -3512,12 +3673,7 @@ class BalkGrabGrabber(QMainWindow):
 
         download = self.downloads[download_id]
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu { background-color: #2b2b2b; color: #ffffff; border: 1px solid #404040; padding: 4px; }
-            QMenu::item { padding: 6px 20px; }
-            QMenu::item:selected { background-color: #1a3d2a; }
-            QMenu::separator { height: 1px; background: #404040; margin: 4px 8px; }
-        """)
+        menu.setStyleSheet(_MENU_STYLE)
 
         file_exists = download.filepath and os.path.exists(download.filepath)
         is_done = download.status == 'done'
@@ -3583,10 +3739,10 @@ class BalkGrabGrabber(QMainWindow):
             return
 
         # Stop any previous conversion timer/process
-        if hasattr(self, '_convert_timer') and self._convert_timer:
+        if self._convert_timer is not None:
             self._convert_timer.stop()
             self._convert_timer = None
-        if hasattr(self, '_convert_proc') and self._convert_proc:
+        if self._convert_proc is not None:
             try:
                 self._convert_proc.terminate()
             except Exception:
@@ -3688,15 +3844,20 @@ class BalkGrabGrabber(QMainWindow):
             # Kill external player (mpv/vlc) if running
             self.kill_external_player()
 
+            # Stop search worker if running
+            if self.search_worker and self.search_worker.isRunning():
+                self.search_worker.quit()
+                self.search_worker.wait(300)
+
             # Stop external player monitor timer
-            if hasattr(self, '_ext_player_timer') and self._ext_player_timer:
+            if self._ext_player_timer is not None:
                 self._ext_player_timer.stop()
 
             # Stop conversion timer and process
-            if hasattr(self, '_convert_timer') and self._convert_timer:
+            if self._convert_timer is not None:
                 self._convert_timer.stop()
                 self._convert_timer = None
-            if hasattr(self, '_convert_proc') and self._convert_proc:
+            if self._convert_proc is not None:
                 try:
                     self._convert_proc.terminate()
                 except Exception:
