@@ -18,9 +18,13 @@ import sys
 import os
 import json
 import threading
+import atexit
 import requests
 import logging
 from datetime import datetime
+
+# Limit concurrent thumbnail downloads to avoid spawning 100+ threads on playlists
+_THUMBNAIL_SEMAPHORE = threading.Semaphore(4)
 
 # Add deno to PATH if available (used by yt-dlp for YouTube JS challenge solving)
 _deno_path = os.path.expanduser("~/.deno/bin")
@@ -90,7 +94,7 @@ class ClickableSlider(QSlider):
         super().mouseReleaseEvent(event)
 
 # ============ VERSION INFO ============
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 APP_NAME = "BalkGrab"
 
 _MENU_STYLE = """
@@ -165,6 +169,7 @@ TRANSLATIONS = {
         'start_minimized': 'Start minimized',
         'continue_playing_tray': 'Continue playing when minimized to tray',
         'notifications': 'Show download notifications',
+        'clipboard_monitor': 'Auto-detect YouTube/video URLs from clipboard',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Simultaneous downloads:',
         'speed_limit': 'Download speed limit:',
@@ -310,6 +315,7 @@ copies or substantial portions of the Software.</p>
         'start_minimized': 'Minimiert starten',
         'continue_playing_tray': 'Weiterspielen wenn in Taskleiste minimiert',
         'notifications': 'Download-Benachrichtigungen anzeigen',
+        'clipboard_monitor': 'YouTube/Video-URLs aus Zwischenablage erkennen',
         'downloads_settings': 'Downloads',
         'simultaneous': 'Gleichzeitige Downloads:',
         'speed_limit': 'Download-Geschwindigkeitslimit:',
@@ -421,6 +427,7 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'start_minimized': 'Pokreni minimizirano',
         'continue_playing_tray': 'Nastavi reprodukciju kad je minimizirano u tray',
         'notifications': 'Prikaži obavijesti o preuzimanju',
+        'clipboard_monitor': 'Automatski detektuj YouTube/video URL-ove iz clipboarda',
         'downloads_settings': 'Preuzimanja',
         'simultaneous': 'Istovremena preuzimanja:',
         'speed_limit': 'Ograničenje brzine preuzimanja:',
@@ -626,11 +633,15 @@ class ThumbnailWorker(QThread):
         try:
             if self.url:
                 log.debug(f"📷 Downloading thumbnail [{self.index}]")
-                response = requests.get(self.url, timeout=10)
-                if response.status_code == 200:
-                    pixmap = QPixmap()
-                    if pixmap.loadFromData(response.content):
-                        self.signals.thumbnail_ready.emit(self.index, pixmap)
+                _THUMBNAIL_SEMAPHORE.acquire()
+                try:
+                    response = requests.get(self.url, timeout=10)
+                    if response.status_code == 200:
+                        pixmap = QPixmap()
+                        if pixmap.loadFromData(response.content):
+                            self.signals.thumbnail_ready.emit(self.index, pixmap)
+                finally:
+                    _THUMBNAIL_SEMAPHORE.release()
         except Exception as e:
             log.error(f"❌ Thumbnail [{self.index}] error: {e}")
 
@@ -717,6 +728,8 @@ class DownloadWorker(QThread):
                     'writethumbnail': self.embed_metadata,
                     'prefer_ffmpeg': True,
                     'noplaylist': True,
+                    'socket_timeout': 30,
+                    'fragment_retries': 3,
                     **cookies_opts,
                 }
                 if self.speed_limit > 0:
@@ -744,6 +757,8 @@ class DownloadWorker(QThread):
                     'postprocessor_hooks': [self.postprocessor_hook],
                     'merge_output_format': 'mp4',
                     'noplaylist': True,
+                    'socket_timeout': 30,
+                    'fragment_retries': 3,
                     **cookies_opts,
                 }
                 if self.speed_limit > 0:
@@ -767,7 +782,7 @@ class DownloadWorker(QThread):
 
         except Exception as e:
             error_msg = str(e)
-            log.error(f"❌ Download error: {error_msg}")
+            log.error(f"❌ Download error: {error_msg}", exc_info=True)
             self.signals.error.emit(self.item.id, error_msg)
 
 
@@ -920,6 +935,8 @@ class BalkGrabGrabber(QMainWindow):
         self._preview_last_position = -1
         self._preview_stall_count = 0
         self._preview_temp_path = None
+        self._preview_all_temps: list = []  # all temp dirs created this session
+        atexit.register(self._cleanup_all_preview_temps)
 
         # System tray
         self.tray_icon = None
@@ -1741,6 +1758,10 @@ class BalkGrabGrabber(QMainWindow):
         self.notifications_checkbox.setChecked(self.settings.value("notifications", True, type=bool))
         appearance_layout.addWidget(self.notifications_checkbox)
 
+        self.clipboard_monitor_checkbox = QCheckBox(self.get_text('clipboard_monitor'))
+        self.clipboard_monitor_checkbox.setChecked(self.settings.value("clipboard_monitor", True, type=bool))
+        appearance_layout.addWidget(self.clipboard_monitor_checkbox)
+
         layout.addWidget(appearance_group)
 
         # Downloads settings
@@ -2041,6 +2062,7 @@ class BalkGrabGrabber(QMainWindow):
         self.settings.setValue("continue_playing_tray", self.continue_playing_tray_checkbox.isChecked())
         self.settings.setValue("start_minimized", self.start_minimized_checkbox.isChecked())
         self.settings.setValue("notifications", self.notifications_checkbox.isChecked())
+        self.settings.setValue("clipboard_monitor", self.clipboard_monitor_checkbox.isChecked())
         self.settings.setValue("simultaneous_downloads", self.simultaneous_spin.value())
         self.settings.setValue("speed_limit", self.speed_limit_spin.value())
         self.settings.setValue("embed_metadata", self.embed_metadata_checkbox.isChecked())
@@ -2152,11 +2174,19 @@ class BalkGrabGrabber(QMainWindow):
         self.quality_combo.addItems(options)
 
     @staticmethod
-    @staticmethod
     def is_direct_url(text: str) -> bool:
         """Check if text is any valid URL that can be passed directly to yt-dlp"""
         t = text.lower()
         return t.startswith('http://') or t.startswith('https://')
+
+    @staticmethod
+    def is_youtube_video_url(url: str) -> bool:
+        """Check if URL points to a specific YouTube video (not a channel/playlist)"""
+        if 'youtube.com' in url:
+            return 'watch?v=' in url or '/shorts/' in url or '/live/' in url
+        if 'youtu.be/' in url:
+            return True
+        return False  # non-YouTube URLs are assumed to be direct video URLs
 
     @staticmethod
     def is_youtube_url(text: str) -> bool:
@@ -2177,8 +2207,10 @@ class BalkGrabGrabber(QMainWindow):
 
     def on_clipboard_changed(self):
         """Auto-detect video URLs in clipboard"""
+        if not self.settings.value("clipboard_monitor", True, type=bool):
+            return
         text = QApplication.clipboard().text().strip()
-        if text and self.is_direct_url(text):
+        if text and self.is_youtube_url(text):
             current = self.search_input.text().strip()
             if current != text:
                 self.search_input.setText(text)
@@ -2693,6 +2725,11 @@ class BalkGrabGrabber(QMainWindow):
                 else:
                     continue
 
+            # Skip channel/playlist URLs
+            if self.is_youtube_url(url) and not self.is_youtube_video_url(url):
+                log.warning(f"Skipping channel/playlist URL: {url}")
+                continue
+
             download = DownloadItem(
                 url=url,
                 title=video.get('title', 'Unknown'),
@@ -2719,12 +2756,8 @@ class BalkGrabGrabber(QMainWindow):
         speed_limit = self.settings.value("speed_limit", 0, type=int)
 
         while self._download_queue:
-            # Recount each iteration — handles concurrent completions between iterations
-            active_count = len([
-                did for did in self._active_batch_downloads
-                if did in self.download_workers and self.download_workers[did].isRunning()
-            ])
-            if active_count >= max_concurrent:
+            # O(1) — set is kept accurate by on_download_finished/on_download_error
+            if len(self._active_batch_downloads) >= max_concurrent:
                 break
 
             download_id = self._download_queue.pop(0)
@@ -2774,6 +2807,7 @@ class BalkGrabGrabber(QMainWindow):
         try:
             import tempfile
             tmp_dir = tempfile.mkdtemp(prefix='balkgrab_preview_')
+            self._preview_all_temps.append(tmp_dir)
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
@@ -2825,11 +2859,18 @@ class BalkGrabGrabber(QMainWindow):
         self.status_label.setText("Preview failed ❌")
 
     def _cleanup_preview_temp(self):
-        """Delete temp preview file"""
+        """Delete current temp preview file"""
         if self._preview_temp_path:
             import shutil
             shutil.rmtree(self._preview_temp_path, ignore_errors=True)
             self._preview_temp_path = None
+
+    def _cleanup_all_preview_temps(self):
+        """Delete all temp preview dirs (called by atexit on crash/close)"""
+        import shutil
+        for tmp_dir in self._preview_all_temps:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        self._preview_all_temps.clear()
 
     def stop_preview(self):
         """Stop preview"""
@@ -2966,6 +3007,13 @@ class BalkGrabGrabber(QMainWindow):
                 url = f"https://www.youtube.com/watch?v={video_id}"
             else:
                 return
+
+        # Block channel/playlist URLs — would download entire channel
+        if self.is_youtube_url(url) and not self.is_youtube_video_url(url):
+            QMessageBox.warning(self, "Cannot Download",
+                "This result is a channel or playlist, not a specific video.\n"
+                "Please search for and select a specific video to download.")
+            return
 
         # Create download item
         format_type = 'audio' if self.audio_radio.isChecked() else 'video'
@@ -3177,6 +3225,7 @@ class BalkGrabGrabber(QMainWindow):
         self._reset_download_btn()
         self.progress_bar.setValue(100)
         self.status_label.setText(self.get_text('done'))
+        QTimer.singleShot(2000, lambda: self.progress_bar.setValue(0))
         _dl = self.downloads.get(download_id)
         title = _dl.title[:50] if _dl else ""
         format_type = _dl.format_type if _dl else "video"
@@ -3868,6 +3917,9 @@ class BalkGrabGrabber(QMainWindow):
             for worker in list(self.download_workers.values()):
                 if worker.isRunning():
                     worker.cancel()
+
+            # Clean up all preview temp dirs
+            self._cleanup_all_preview_temps()
 
             # Stop all media players and release audio resources
             self.media_player.stop()
