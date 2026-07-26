@@ -54,9 +54,21 @@
 
 ### Quick Install (Recommended)
 
+Download the latest release from the [Releases](https://github.com/NeleBiH/BalkGrab/releases) page, or use git:
+
 ```bash
+# Option 1: Download and extract tar
+tar xzf BalkGrab-v0.4.0.tar.gz
+cd BalkGrab-0.4.0
+
+# Option 2: Clone with git
 git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
+```
+
+Then run the setup script:
+
+```bash
 ./balkgrab/setup_BalkGrab.sh
 ```
 
