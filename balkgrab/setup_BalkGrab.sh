@@ -419,8 +419,8 @@ do_install() {
         print_ok "BalkGrab updated ($(get_version))"
 
         print_step "[3/4] Updating icons and menu entry..."
-        if [[ -d "$SCRIPT_DIR/Icons/linux" ]]; then
-            install_icons "$SCRIPT_DIR/Icons/linux"
+        if [[ -d "$SCRIPT_DIR/Icons" ]]; then
+            install_icons "$SCRIPT_DIR/Icons"
             print_ok "Icons updated"
         fi
         create_desktop_entry
@@ -466,8 +466,8 @@ do_install() {
     print_ok "Launcher created: $LAUNCHER"
 
     print_step "[4/5] Installing icons..."
-    if [[ -d "$SCRIPT_DIR/Icons/linux" ]]; then
-        install_icons "$SCRIPT_DIR/Icons/linux"
+    if [[ -d "$SCRIPT_DIR/Icons" ]]; then
+        install_icons "$SCRIPT_DIR/Icons"
         print_ok "Icons installed"
     fi
 

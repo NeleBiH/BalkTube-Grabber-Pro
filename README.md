@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="balkgrab/Icons/linux/icon_256x256.png" alt="BalkGrab Logo" width="128"/>
+  <img src="balkgrab/Icons/icon_256x256.png" alt="BalkGrab Logo" width="128"/>
 </p>
 
 <h1 align="center">BalkGrab</h1>
@@ -142,7 +142,7 @@ BalkGrab/
 │   ├── constants.py        # Paths and constants
 │   ├── translations.py     # Multi-language support (EN/DE/HR)
 │   ├── themes.py           # Theme definitions (easy to add new themes)
-│   ├── Icons/              # Application icons
+│   ├── Icons/              # Application icons (all sizes)
 │   └── setup_BalkGrab.sh   # Install/update/uninstall script
 ├── requirements.txt
 ├── LICENSE

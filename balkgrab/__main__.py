@@ -14,7 +14,7 @@ log = logging.getLogger("BalkGrab")
 
 def main():
     from . import APP_NAME, APP_VERSION
-    from .constants import ICON_BASE_DIR, ICON_DIR
+    from .constants import ICON_DIR
 
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QIcon
@@ -30,7 +30,7 @@ def main():
     app.setOrganizationName("BalkGrab")
     app.setDesktopFileName("balkgrab")
 
-    icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_256x256.png")
+    icon_path = os.path.join(ICON_DIR, "icon_256x256.png")
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 

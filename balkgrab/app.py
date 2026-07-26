@@ -33,7 +33,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 import yt_dlp
 
 from . import APP_VERSION, APP_NAME
-from .constants import ICON_BASE_DIR, ICON_DIR
+from .constants import ICON_DIR
 from .themes import get_theme, get_available_themes
 from .translations import TRANSLATIONS
 from .models import WorkerSignals, DownloadItem
@@ -59,7 +59,7 @@ class BalkGrabGrabber(QMainWindow):
         self.resize(1100, 750)
 
         # Set window icon
-        icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_256x256.png")
+        icon_path = os.path.join(ICON_DIR, "icon_256x256.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -178,8 +178,8 @@ class BalkGrabGrabber(QMainWindow):
                     palette.setColor(role, QColor(theme["palette"][key]))
             app.setPalette(palette)
             # Use custom green icons for dark theme
-            self._play_icon = QIcon(os.path.join(ICON_BASE_DIR, ICON_DIR, "play_32x32.png"))
-            self._stop_icon = QIcon(os.path.join(ICON_BASE_DIR, ICON_DIR, "stop_32x32.png"))
+            self._play_icon = QIcon(os.path.join(ICON_DIR, "play_32x32.png"))
+            self._stop_icon = QIcon(os.path.join(ICON_DIR, "stop_32x32.png"))
 
         # Update preview play button icon
         if hasattr(self, 'preview_play_btn'):
@@ -823,7 +823,7 @@ class BalkGrabGrabber(QMainWindow):
         header.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = QLabel()
-        icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_256x256.png")
+        icon_path = os.path.join(ICON_DIR, "icon_256x256.png")
         if os.path.exists(icon_path):
             pixmap = QPixmap(icon_path).scaled(
                 64, 64,
@@ -927,7 +927,7 @@ class BalkGrabGrabber(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray_icon = QSystemTrayIcon(self)
 
-            icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_64x64.png")
+            icon_path = os.path.join(ICON_DIR, "icon_64x64.png")
             if os.path.exists(icon_path):
                 self.tray_icon.setIcon(QIcon(icon_path))
             else:

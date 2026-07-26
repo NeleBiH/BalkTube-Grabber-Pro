@@ -5,8 +5,7 @@ import threading
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # Icons are inside the package
-ICON_BASE_DIR = os.path.join(APP_DIR, "Icons")
-ICON_DIR = "linux"
+ICON_DIR = os.path.join(APP_DIR, "Icons")
 
 # Limit concurrent thumbnail downloads
 THUMBNAIL_SEMAPHORE = threading.Semaphore(4)
