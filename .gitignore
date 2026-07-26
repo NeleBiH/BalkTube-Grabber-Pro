@@ -42,13 +42,6 @@ build-standalone/
 # Old monolithic file (replaced by balkgrab/ package)
 BalkGrab.py
 
-# Screenshot source files
+# Local dev notes and screenshots (not part of the project)
+dev_*
 Novi screenshoti/
-
-# Local dev files
-zadnji prompt
-moguce ideje za buducnost.md
-problemi.txt
-DOCUMENTATION.md
-PROBLEMI.md
-dev_log_balkgrab.md
