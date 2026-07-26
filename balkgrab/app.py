@@ -1,18 +1,4 @@
-"""
-🎵 BalkGrab v2.0 - ClipGrab clone done right! 🎵
-- PySide6 GUI with tabs
-- YouTube video search
-- Download manager with progress tracking
-- Integrated media player
-- System tray support
-- Multi-language (EN/DE/HR)
-
-INSTALLATION:
-pip install PySide6 yt-dlp requests
-
-ALSO REQUIRED:
-ffmpeg - for audio conversion
-"""
+"""Main window class for BalkGrab."""
 
 import sys
 import os
@@ -21,15 +7,6 @@ import threading
 import atexit
 import requests
 import logging
-from datetime import datetime
-
-# Limit concurrent thumbnail downloads to avoid spawning 100+ threads on playlists
-_THUMBNAIL_SEMAPHORE = threading.Semaphore(4)
-
-# Add deno to PATH if available (used by yt-dlp for YouTube JS challenge solving)
-_deno_path = os.path.expanduser("~/.deno/bin")
-if os.path.isdir(_deno_path) and _deno_path not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = _deno_path + os.pathsep + os.environ.get("PATH", "")
 from pathlib import Path
 from typing import Optional, List, Dict
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
@@ -39,859 +16,35 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QLabel, QComboBox, QProgressBar,
     QListWidget, QListWidgetItem, QFileDialog, QMessageBox,
     QGroupBox, QRadioButton, QButtonGroup, QFrame, QSplitter,
-    QStackedWidget, QSizePolicy, QScrollArea, QTabWidget,
-    QSlider, QCheckBox, QTextEdit, QSystemTrayIcon, QMenu,
+    QSizePolicy, QScrollArea, QTabWidget,
+    QSlider, QCheckBox, QTextEdit, QTextBrowser, QSystemTrayIcon, QMenu,
     QTableWidget, QTableWidgetItem, QHeaderView, QSpinBox, QInputDialog,
-    QDialog, QToolButton
+    QDialog, QToolButton, QStyle
 )
 from PySide6.QtCore import (
-    Qt, Signal, QObject, QSize, QThread, QMetaObject, Q_ARG,
+    Qt, QSize, QMetaObject, Q_ARG,
     Slot, QUrl, QTimer, QSettings
 )
 from PySide6.QtGui import (
-    QPixmap, QFont, QIcon, QPalette, QColor, QAction, QDesktopServices
+    QPixmap, QIcon, QColor, QAction, QDesktopServices, QPalette
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 import yt_dlp
 
-# ============ DEBUG LOGGING ============
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
+from . import APP_VERSION, APP_NAME
+from .constants import ICON_BASE_DIR, ICON_DIR
+from .themes import get_theme, get_available_themes
+from .translations import TRANSLATIONS
+from .models import WorkerSignals, DownloadItem
+from .workers import SearchWorker, ThumbnailWorker, DownloadWorker
+from .widgets import ClickableSlider, VideoItemWidget
+
 log = logging.getLogger("BalkGrab")
 
-# ============ APP DIRECTORY ============
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-ICON_DIR = "windows" if sys.platform == "win32" else "linux"
 
-
-# ============ CLICKABLE SLIDER ============
-class ClickableSlider(QSlider):
-    """Slider that responds to clicks at the clicked position"""
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            # Emit sliderPressed FIRST so the flag gets set before position update
-            self.sliderPressed.emit()
-
-            # Calculate value from click position
-            if self.orientation() == Qt.Horizontal:
-                value = self.minimum() + (self.maximum() - self.minimum()) * event.position().x() / self.width()
-            else:
-                value = self.minimum() + (self.maximum() - self.minimum()) * (self.height() - event.position().y()) / self.height()
-            self.setValue(int(value))
-            self.sliderMoved.emit(int(value))
-            event.accept()
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            # Emit sliderReleased to finalize the seek
-            self.sliderReleased.emit()
-        super().mouseReleaseEvent(event)
-
-# ============ VERSION INFO ============
-APP_VERSION = "0.3.4"
-APP_NAME = "BalkGrab"
-
-_MENU_STYLE = """
-    QMenu { background-color: #2b2b2b; color: #ffffff; border: 1px solid #404040; padding: 4px; }
-    QMenu::item { padding: 6px 20px; }
-    QMenu::item:selected { background-color: #00aa44; color: #ffffff; }
-    QMenu::item:disabled { color: #666666; }
-    QMenu::separator { height: 1px; background: #404040; margin: 4px 8px; }
-"""
-
-# ============ TRANSLATIONS ============
-TRANSLATIONS = {
-    'en': {
-        'app_title': '🎵 BalkGrab',
-        'tab_search': '🔍 Search',
-        'tab_downloads': '⬇️ Downloads',
-        'tab_settings': '⚙️ Settings',
-        'tab_about': 'ℹ️ About',
-        'search_placeholder': '🔍 Search YouTube or paste URL...',
-        'search_btn': '🔍 Search',
-        'searching': '⏳ Searching...',
-        'results': '📋 Search Results',
-        'preview': '📺 Preview',
-        'select_video': 'Select video from list',
-        'no_video_selected': 'No video selected',
-        'format': '⚙️ Format',
-        'video': '🎬 Video',
-        'audio': '🎵 Audio',
-        'quality': 'Quality:',
-        'status': '📊 Status',
-        'waiting': 'Waiting for selection... 👀',
-        'download_btn': '⬇️  DOWNLOAD NOW!  ⬇️',
-        'stop_download': '⏹  STOP DOWNLOAD  ⏹',
-        'found_videos': 'Found {count} videos! 🎉',
-        'load_more': '🔽 Load More Results',
-        'no_results': 'No results 😢',
-        'ready_download': 'Ready to download! 🚀',
-        'downloading': 'Downloading... {percent:.1f}%',
-        'processing': 'Processing... ⏳',
-        'done': 'Done! ✅',
-        'error': 'Error! ❌',
-        'output_folder': '📁 Output Folder',
-        'browse': 'Browse...',
-        'best_quality': 'Best quality',
-        # Downloads tab
-        'downloads_title': '⬇️ Download Manager',
-        'no_downloads': 'No downloads yet.\nSearch and download some music! 🎵',
-        'filename': 'Filename',
-        'progress': 'Progress',
-        'status_col': 'Status',
-        'actions': 'Actions',
-        'clear_completed': '🗑️ Clear Completed',
-        'open_folder': '📂 Open Folder',
-        'ctx_play': 'Play',
-        'ctx_open_folder': 'Open containing folder',
-        'ctx_download_again': 'Download again',
-        'ctx_convert_to': 'Convert to',
-        'ctx_remove': 'Remove from list',
-        'converting_file': 'Converting to {fmt}...',
-        'conversion_done': 'Converted to {fmt} — check download folder',
-        'conversion_failed': 'Conversion failed: {error}',
-        # Player
-        'player_title': '🎵 Media Player',
-        'now_playing': 'Now Playing:',
-        'nothing_playing': 'Nothing playing',
-        # Settings
-        'settings_title': '⚙️ Settings',
-        'language': 'Language:',
-        'appearance': 'Appearance',
-        'system_tray': 'Show system tray icon',
-        'minimize_tray': 'Minimize to system tray',
-        'start_minimized': 'Start minimized',
-        'continue_playing_tray': 'Continue playing when minimized to tray',
-        'notifications': 'Show download notifications',
-        'clipboard_monitor': 'Auto-detect YouTube/video URLs from clipboard',
-        'downloads_settings': 'Downloads',
-        'simultaneous': 'Simultaneous downloads:',
-        'speed_limit': 'Download speed limit:',
-        'speed_limit_unit': 'KB/s (0 = unlimited)',
-        'embed_metadata': 'Embed metadata & cover art in audio files',
-        'open_in_browser': 'Open in browser',
-        'copy_url': 'Copy URL',
-        'copy_title': 'Copy title',
-        'auto_play': 'Auto-play after download',
-        'download_location': 'Download location:',
-        'save_settings': '💾 Save Settings',
-        'settings_saved': 'Settings saved! ✅',
-        # About
-        'about_title': 'About BalkGrab',
-        'about_description': '''
-<h2>🎵 BalkGrab</h2>
-<p><b>Version:</b> {version}</p>
-
-<h3>What is this?</h3>
-<p>BalkGrab is a free, open-source YouTube downloader inspired by ClipGrab.
-Download videos in various resolutions or convert them to audio formats like MP3, FLAC, and more!</p>
-
-<h3>Features</h3>
-<ul>
-<li>🔍 Search YouTube directly from the app</li>
-<li>📺 Preview videos with built-in stream player</li>
-<li>🎬 Download videos in resolutions from 240p to 4K</li>
-<li>🎵 Convert to audio: MP3, AAC, FLAC, WAV, OGG</li>
-<li>⬇️ Download manager with progress tracking</li>
-<li>🎧 Built-in media player for downloaded files</li>
-<li>📋 Smart playlist detection with batch download</li>
-<li>📎 Clipboard auto-detection of YouTube URLs</li>
-<li>🍪 Browser cookies support for age-restricted videos</li>
-<li>🌍 Multi-language: English, Deutsch, Hrvatski/Srpski</li>
-<li>🖥️ System tray integration</li>
-</ul>
-
-<h3>Technologies</h3>
-<ul>
-<li><b>GUI:</b> PySide6 (Qt for Python)</li>
-<li><b>Backend:</b> yt-dlp</li>
-<li><b>Audio/Video:</b> FFmpeg</li>
-</ul>
-''',
-        'license_title': '📜 License',
-        'license_text': '''
-<h3>MIT License</h3>
-<p>Copyright (c) 2024-2026 BalkGrab Team</p>
-
-<p>Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:</p>
-
-<p>The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.</p>
-
-<p><b>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.</b></p>
-
-<h3>Third-party Licenses</h3>
-<ul>
-<li><b>PySide6:</b> LGPL v3</li>
-<li><b>yt-dlp:</b> Unlicense (Public Domain)</li>
-<li><b>requests:</b> Apache 2.0</li>
-<li><b>FFmpeg:</b> LGPL v2.1+ / GPL v2+</li>
-</ul>
-
-<p>All third-party licenses are compatible with this MIT license.</p>
-''',
-        'links_title': '🔗 Links',
-        'github': '⭐ GitHub Repository',
-        'report_bug': '🐛 Report a Bug',
-        # Playlist
-        'playlist_detected': 'Playlist Detected',
-        'playlist_msg': 'This playlist contains {count} videos.\nWhat would you like to do?',
-        'playlist_first_video': 'Show First Video',
-        'playlist_load_first': 'First {count} videos',
-        'playlist_load_all': 'All {count} videos',
-        'playlist_load_btn': 'Load Playlist',
-        'playlist_loading': 'Loading playlist info...',
-        'playlist_warning': 'Loading many videos may be slow!',
-        'playlist_cancel': 'Cancel',
-        'footer': 'Made with ❤️,Claude code and some coffee | Balkan Edition 🇧🇦🇭🇷🇷🇸'
-    },
-    'de': {
-        'app_title': '🎵 BalkGrab',
-        'tab_search': '🔍 Suchen',
-        'tab_downloads': '⬇️ Downloads',
-        'tab_settings': '⚙️ Einstellungen',
-        'tab_about': 'ℹ️ Über',
-        'search_placeholder': '🔍 YouTube durchsuchen oder URL einfügen...',
-        'search_btn': '🔍 Suchen',
-        'searching': '⏳ Suche...',
-        'results': '📋 Suchergebnisse',
-        'preview': '📺 Vorschau',
-        'select_video': 'Video aus Liste auswählen',
-        'no_video_selected': 'Kein Video ausgewählt',
-        'format': '⚙️ Format',
-        'video': '🎬 Video',
-        'audio': '🎵 Audio',
-        'quality': 'Qualität:',
-        'status': '📊 Status',
-        'waiting': 'Warte auf Auswahl... 👀',
-        'download_btn': '⬇️  JETZT HERUNTERLADEN!  ⬇️',
-        'stop_download': '⏹  DOWNLOAD STOPPEN  ⏹',
-        'found_videos': '{count} Videos gefunden! 🎉',
-        'load_more': '🔽 Mehr Ergebnisse laden',
-        'no_results': 'Keine Ergebnisse 😢',
-        'ready_download': 'Bereit zum Download! 🚀',
-        'downloading': 'Herunterladen... {percent:.1f}%',
-        'processing': 'Verarbeitung... ⏳',
-        'done': 'Fertig! ✅',
-        'error': 'Fehler! ❌',
-        'output_folder': '📁 Ausgabeordner',
-        'browse': 'Durchsuchen...',
-        'best_quality': 'Beste Qualität',
-        'downloads_title': '⬇️ Download-Manager',
-        'no_downloads': 'Noch keine Downloads.\nSuche und lade Musik herunter! 🎵',
-        'filename': 'Dateiname',
-        'progress': 'Fortschritt',
-        'status_col': 'Status',
-        'actions': 'Aktionen',
-        'clear_completed': '🗑️ Abgeschlossene löschen',
-        'open_folder': '📂 Ordner öffnen',
-        'ctx_play': 'Abspielen',
-        'ctx_open_folder': 'Ordner öffnen',
-        'ctx_download_again': 'Erneut herunterladen',
-        'ctx_convert_to': 'Konvertieren zu',
-        'ctx_remove': 'Aus Liste entfernen',
-        'converting_file': 'Konvertiere zu {fmt}...',
-        'conversion_done': 'Zu {fmt} konvertiert — im Download-Ordner prüfen',
-        'conversion_failed': 'Konvertierung fehlgeschlagen: {error}',
-        'player_title': '🎵 Mediaplayer',
-        'now_playing': 'Wird abgespielt:',
-        'nothing_playing': 'Nichts wird abgespielt',
-        'settings_title': '⚙️ Einstellungen',
-        'language': 'Sprache:',
-        'appearance': 'Aussehen',
-        'system_tray': 'Taskleistensymbol anzeigen',
-        'minimize_tray': 'In Taskleiste minimieren',
-        'start_minimized': 'Minimiert starten',
-        'continue_playing_tray': 'Weiterspielen wenn in Taskleiste minimiert',
-        'notifications': 'Download-Benachrichtigungen anzeigen',
-        'clipboard_monitor': 'YouTube/Video-URLs aus Zwischenablage erkennen',
-        'downloads_settings': 'Downloads',
-        'simultaneous': 'Gleichzeitige Downloads:',
-        'speed_limit': 'Download-Geschwindigkeitslimit:',
-        'speed_limit_unit': 'KB/s (0 = unbegrenzt)',
-        'embed_metadata': 'Metadaten & Cover-Art in Audiodateien einbetten',
-        'open_in_browser': 'Im Browser öffnen',
-        'copy_url': 'URL kopieren',
-        'copy_title': 'Titel kopieren',
-        'auto_play': 'Nach Download automatisch abspielen',
-        'download_location': 'Download-Speicherort:',
-        'save_settings': '💾 Einstellungen speichern',
-        'settings_saved': 'Einstellungen gespeichert! ✅',
-        'about_title': 'Über BalkGrab',
-        'about_description': '''
-<h2>🎵 BalkGrab</h2>
-<p><b>Version:</b> {version}</p>
-
-<h3>Was ist das?</h3>
-<p>BalkGrab ist ein kostenloser, Open-Source YouTube-Downloader inspiriert von ClipGrab.
-Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie sie in Audioformate wie MP3, FLAC und mehr!</p>
-
-<h3>Funktionen</h3>
-<ul>
-<li>🔍 YouTube direkt in der App durchsuchen</li>
-<li>📺 Videos mit integriertem Stream-Player ansehen</li>
-<li>🎬 Videos in Auflösungen von 240p bis 4K herunterladen</li>
-<li>🎵 In Audio konvertieren: MP3, AAC, FLAC, WAV, OGG</li>
-<li>⬇️ Download-Manager mit Fortschrittsverfolgung</li>
-<li>🎧 Integrierter Mediaplayer für heruntergeladene Dateien</li>
-<li>📋 Intelligente Playlist-Erkennung mit Batch-Download</li>
-<li>📎 Automatische Erkennung von YouTube-URLs in der Zwischenablage</li>
-<li>🍪 Browser-Cookies für altersbeschränkte Videos</li>
-<li>🌍 Mehrsprachig: English, Deutsch, Hrvatski/Srpski</li>
-<li>🖥️ Taskleisten-Integration</li>
-</ul>
-''',
-        'license_title': '📜 Lizenz',
-        'links_title': '🔗 Links',
-        'github': '⭐ GitHub Repository',
-        'report_bug': '🐛 Fehler melden',
-        # Playlist
-        'playlist_detected': 'Playlist erkannt',
-        'playlist_msg': 'Diese Playlist enthält {count} Videos.\nWas möchten Sie tun?',
-        'playlist_first_video': 'Erstes Video anzeigen',
-        'playlist_load_first': 'Erste {count} Videos',
-        'playlist_load_all': 'Alle {count} Videos',
-        'playlist_load_btn': 'Playlist laden',
-        'playlist_loading': 'Lade Playlist-Info...',
-        'playlist_warning': 'Viele Videos zu laden kann langsam sein!',
-        'playlist_cancel': 'Abbrechen',
-        'footer': 'Mit ❤️ und etwas Ćevapi gemacht | Balkan Edition 🇧🇦🇭🇷🇷🇸'
-    },
-    'hr': {
-        'app_title': '🎵 BalkGrab',
-        'tab_search': '🔍 Traži',
-        'tab_downloads': '⬇️ Preuzimanja',
-        'tab_settings': '⚙️ Postavke',
-        'tab_about': 'ℹ️ O aplikaciji',
-        'search_placeholder': '🔍 Pretraži YouTube ili zalijepi URL...',
-        'search_btn': '🔍 Pretraži',
-        'searching': '⏳ Tražim...',
-        'results': '📋 Rezultati pretrage',
-        'preview': '📺 Preview',
-        'select_video': 'Odaberi video iz liste',
-        'no_video_selected': 'Nije odabran video',
-        'format': '⚙️ Format',
-        'video': '🎬 Video',
-        'audio': '🎵 Audio',
-        'quality': 'Kvaliteta:',
-        'status': '📊 Status',
-        'waiting': 'Čekam da odabereš... 👀',
-        'download_btn': '⬇️  SKINI ODMAH!  ⬇️',
-        'stop_download': '⏹  ZAUSTAVI SKIDANJE  ⏹',
-        'found_videos': 'Pronađeno {count} videa! 🎉',
-        'load_more': '🔽 Učitaj više rezultata',
-        'no_results': 'Nema rezultata 😢',
-        'ready_download': 'Spremno za skidanje! 🚀',
-        'downloading': 'Skidam... {percent:.1f}%',
-        'processing': 'Obrađujem... ⏳',
-        'done': 'Gotovo! ✅',
-        'error': 'Greška! ❌',
-        'output_folder': '📁 Izlazna mapa',
-        'browse': 'Odaberi...',
-        'best_quality': 'Najbolja kvaliteta',
-        'downloads_title': '⬇️ Upravitelj preuzimanja',
-        'no_downloads': 'Nema preuzimanja.\nPretraži i skini neku muziku! 🎵',
-        'filename': 'Naziv datoteke',
-        'progress': 'Napredak',
-        'status_col': 'Status',
-        'actions': 'Akcije',
-        'clear_completed': '🗑️ Očisti završene',
-        'open_folder': '📂 Otvori mapu',
-        'ctx_play': 'Pusti',
-        'ctx_open_folder': 'Otvori mapu',
-        'ctx_download_again': 'Skini ponovo',
-        'ctx_convert_to': 'Konvertiraj u',
-        'ctx_remove': 'Ukloni s liste',
-        'converting_file': 'Konvertiranje u {fmt}...',
-        'conversion_done': 'Konvertirano u {fmt} — provjeri mapu preuzimanja',
-        'conversion_failed': 'Konverzija neuspješna: {error}',
-        'player_title': '🎵 Media Player',
-        'now_playing': 'Sad svira:',
-        'nothing_playing': 'Ništa ne svira',
-        'settings_title': '⚙️ Postavke',
-        'language': 'Jezik:',
-        'appearance': 'Izgled',
-        'system_tray': 'Prikaži ikonu u system trayu',
-        'minimize_tray': 'Minimiziraj u system tray',
-        'start_minimized': 'Pokreni minimizirano',
-        'continue_playing_tray': 'Nastavi reprodukciju kad je minimizirano u tray',
-        'notifications': 'Prikaži obavijesti o preuzimanju',
-        'clipboard_monitor': 'Automatski detektuj YouTube/video URL-ove iz clipboarda',
-        'downloads_settings': 'Preuzimanja',
-        'simultaneous': 'Istovremena preuzimanja:',
-        'speed_limit': 'Ograničenje brzine preuzimanja:',
-        'speed_limit_unit': 'KB/s (0 = neograničeno)',
-        'embed_metadata': 'Ugradi metapodatke i naslovnicu u audio datoteke',
-        'open_in_browser': 'Otvori u pregledniku',
-        'copy_url': 'Kopiraj URL',
-        'copy_title': 'Kopiraj naslov',
-        'auto_play': 'Automatski pusti nakon preuzimanja',
-        'download_location': 'Lokacija preuzimanja:',
-        'save_settings': '💾 Spremi postavke',
-        'settings_saved': 'Postavke spremljene! ✅',
-        'about_title': 'O aplikaciji BalkGrab',
-        'about_description': '''
-<h2>🎵 BalkGrab</h2>
-<p><b>Verzija:</b> {version}</p>
-
-<h3>Šta je ovo?</h3>
-<p>BalkGrab je besplatan YouTube downloader otvorenog koda inspiriran ClipGrab-om.
-Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC i druge!</p>
-
-<h3>Mogućnosti</h3>
-<ul>
-<li>🔍 Pretraži YouTube direktno iz aplikacije</li>
-<li>📺 Pregledaj video sa ugrađenim stream playerom</li>
-<li>🎬 Skidaj videe u rezolucijama od 240p do 4K</li>
-<li>🎵 Pretvori u audio: MP3, AAC, FLAC, WAV, OGG</li>
-<li>⬇️ Upravitelj preuzimanja s praćenjem napretka</li>
-<li>🎧 Ugrađeni media player za skinute fajlove</li>
-<li>📋 Pametna detekcija playlisti sa batch downloadom</li>
-<li>📎 Auto-detekcija YouTube linkova iz clipboarda</li>
-<li>🍪 Browser cookies podrška za age-restricted videe</li>
-<li>🌍 Višejezično: English, Deutsch, Hrvatski/Srpski</li>
-<li>🖥️ System tray integracija</li>
-</ul>
-''',
-        'license_title': '📜 Licenca',
-        'license_text': '''
-<h3>MIT Licenca</h3>
-<p>Copyright (c) 2024-2026 BalkGrab Tim</p>
-
-<p>Ovim se daje dozvola, besplatno, svakoj osobi koja dobije kopiju
-ovog softvera i pripadajuće dokumentacije ("Softver"), da koristi
-Softver bez ograničenja, uključujući bez ograničenja prava na korištenje,
-kopiranje, modificiranje, spajanje, objavljivanje, distribuciju,
-podlicenciranje i/ili prodaju kopija Softvera.</p>
-
-<p><b>SOFTVER SE PRUŽA "KAKAV JEST", BEZ IKAKVE GARANCIJE.</b></p>
-
-<h3>Licence trećih strana</h3>
-<ul>
-<li><b>PySide6:</b> LGPL v3</li>
-<li><b>yt-dlp:</b> Unlicense (Javna domena)</li>
-<li><b>requests:</b> Apache 2.0</li>
-<li><b>FFmpeg:</b> LGPL v2.1+ / GPL v2+</li>
-</ul>
-
-<p>Sve licence trećih strana su kompatibilne s MIT licencom.</p>
-''',
-        'links_title': '🔗 Linkovi',
-        'github': '⭐ GitHub Repozitorij',
-        'report_bug': '🐛 Prijavi grešku',
-        # Playlist
-        'playlist_detected': 'Playlist detektovan',
-        'playlist_msg': 'Ova playlista sadrži {count} videa.\nŠta želiš uraditi?',
-        'playlist_first_video': 'Prikaži prvi video',
-        'playlist_load_first': 'Prvih {count} videa',
-        'playlist_load_all': 'Svih {count} videa',
-        'playlist_load_btn': 'Učitaj playlistu',
-        'playlist_loading': 'Učitavam info o playlisti...',
-        'playlist_warning': 'Učitavanje puno videa može biti sporo!',
-        'playlist_cancel': 'Odustani',
-        'footer': 'Napravljeno s ❤️ i malo kave | Balkan Edition 🇧🇦🇭🇷🇷🇸'
-    }
-}
-
-
-# ============ WORKER SIGNALS ============
-class WorkerSignals(QObject):
-    """Signals for communication between worker threads and GUI"""
-    progress = Signal(str, float, str)  # download_id, percentage, message
-    finished = Signal(str, str, str)  # download_id, status, filepath
-    error = Signal(str, str)  # download_id, error message
-    search_results = Signal(list)  # list of search results
-    thumbnail_ready = Signal(int, QPixmap)  # index, pixmap
-    playlist_info = Signal(str, list)  # original_url, list of video dicts
-
-
-# ============ DOWNLOAD ITEM ============
-class DownloadItem:
-    """Represents a single download"""
-    def __init__(self, url: str, title: str, output_path: str,
-                 format_type: str, quality: str):
-        self.id = f"{datetime.now().strftime('%H%M%S%f')}_{hash(url) % 10000}"
-        self.url = url
-        self.title = title
-        self.output_path = output_path
-        self.format_type = format_type
-        self.quality = quality
-        self.progress = 0.0
-        self.status = "waiting"  # waiting, downloading, processing, done, error
-        self.filepath = ""
-        self.error_message = ""
-        self.created_at = datetime.now()
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization"""
-        return {
-            'id': self.id,
-            'url': self.url,
-            'title': self.title,
-            'output_path': self.output_path,
-            'format_type': self.format_type,
-            'quality': self.quality,
-            'progress': self.progress,
-            'status': self.status,
-            'filepath': self.filepath,
-            'error_message': self.error_message,
-            'created_at': self.created_at.isoformat()
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'DownloadItem':
-        """Create DownloadItem from dictionary"""
-        item = cls(
-            url=data['url'],
-            title=data['title'],
-            output_path=data['output_path'],
-            format_type=data['format_type'],
-            quality=data['quality']
-        )
-        item.id = data['id']
-        item.progress = data.get('progress', 0.0)
-        item.status = data.get('status', 'done')
-        item.filepath = data.get('filepath', '')
-        item.error_message = data.get('error_message', '')
-        if 'created_at' in data:
-            item.created_at = datetime.fromisoformat(data['created_at'])
-        return item
-
-
-# ============ SEARCH WORKER ============
-class SearchWorker(QThread):
-    """Search thread to keep GUI responsive"""
-
-    def __init__(self, query: str, signals: WorkerSignals, count: int = 10):
-        super().__init__()
-        self.query = query
-        self.signals = signals
-        self.count = count
-
-    def run(self):
-        log.info(f"🔍 Starting search: '{self.query}' (count={self.count})")
-        try:
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': True,
-                'default_search': f'ytsearch{self.count}',
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                results = ydl.extract_info(f"ytsearch{self.count}:{self.query}", download=False)
-
-            if results and 'entries' in results:
-                videos = []
-                for i, entry in enumerate(results['entries']):
-                    if not entry:
-                        continue
-                    video_id = entry.get('id', '')
-                    # Skip channel/playlist entries — yt-dlp can return channel
-                    # pages as search results (e.g. searching an artist name).
-                    # Channel IDs start with 'UC' and are 24 chars; playlists
-                    # start with 'PL'. Also check _type field.
-                    entry_type = entry.get('_type', 'url')
-                    if entry_type == 'playlist':
-                        log.debug(f"  [{i+1}] Skipping channel/playlist result: {entry.get('title', '')[:40]}")
-                        continue
-                    if video_id and (
-                        (video_id.startswith('UC') and len(video_id) == 24) or
-                        video_id.startswith('PL')
-                    ):
-                        log.debug(f"  [{i+1}] Skipping channel/playlist ID: {video_id}")
-                        continue
-                    # Always build URL from video ID — entry.get('url') from
-                    # extract_flat can be a channel URL instead of a video URL
-                    if video_id:
-                        video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    else:
-                        video_url = entry.get('url', '')
-                    video = {
-                        'id': video_id,
-                        'title': entry.get('title', 'Unknown'),
-                        'url': video_url,
-                        'thumbnail': entry.get('thumbnail', entry.get('thumbnails', [{}])[0].get('url', '') if entry.get('thumbnails') else ''),
-                        'duration': entry.get('duration', 0),
-                        'channel': entry.get('channel', entry.get('uploader', 'Unknown')),
-                        'view_count': entry.get('view_count', 0),
-                    }
-                    videos.append(video)
-                    log.debug(f"  [{i+1}] {video['title'][:40]}...")
-
-                log.info(f"✅ Found {len(videos)} videos")
-                self.signals.search_results.emit(videos)
-            else:
-                log.warning("⚠️ No results")
-                self.signals.search_results.emit([])
-
-        except Exception as e:
-            log.error(f"❌ Search error: {str(e)}")
-            self.signals.error.emit("search", f"Search error: {str(e)}")
-
-
-# ============ THUMBNAIL WORKER ============
-class ThumbnailWorker(QThread):
-    """Thread for downloading thumbnails"""
-
-    def __init__(self, index: int, url: str, signals: WorkerSignals):
-        super().__init__()
-        self.index = index
-        self.url = url
-        self.signals = signals
-
-    def run(self):
-        try:
-            if self.url:
-                log.debug(f"📷 Downloading thumbnail [{self.index}]")
-                _THUMBNAIL_SEMAPHORE.acquire()
-                try:
-                    response = requests.get(self.url, timeout=10)
-                    if response.status_code == 200:
-                        pixmap = QPixmap()
-                        if pixmap.loadFromData(response.content):
-                            self.signals.thumbnail_ready.emit(self.index, pixmap)
-                finally:
-                    _THUMBNAIL_SEMAPHORE.release()
-        except Exception as e:
-            log.error(f"❌ Thumbnail [{self.index}] error: {e}")
-
-
-# ============ DOWNLOAD WORKER ============
-class DownloadWorker(QThread):
-    """Thread for downloading video/audio"""
-
-    def __init__(self, download_item: DownloadItem, signals: WorkerSignals,
-                 cookies_browser: str = "", embed_metadata: bool = True, speed_limit: int = 0):
-        super().__init__()
-        self.item = download_item
-        self.signals = signals
-        self.cookies_browser = cookies_browser
-        self.embed_metadata = embed_metadata
-        self.speed_limit = speed_limit  # KB/s, 0 = unlimited
-        self._cancelled = False
-
-    def cancel(self):
-        """Request cancellation of this download"""
-        self._cancelled = True
-
-    def postprocessor_hook(self, d):
-        """Called by yt-dlp before/during each postprocessor (e.g. ffmpeg). Abort if cancelled."""
-        if self._cancelled and d.get('status') == 'started':
-            raise Exception("Download cancelled by user")
-
-    def progress_hook(self, d):
-        if self._cancelled:
-            raise Exception("Download cancelled by user")
-        if d['status'] == 'downloading':
-            if 'downloaded_bytes' in d and 'total_bytes' in d and d['total_bytes'] > 0:
-                percent = (d['downloaded_bytes'] / d['total_bytes']) * 100
-                self.signals.progress.emit(self.item.id, percent, "downloading")
-            elif '_percent_str' in d:
-                try:
-                    percent = float(d['_percent_str'].strip().replace('%', ''))
-                    self.signals.progress.emit(self.item.id, percent, "downloading")
-                except Exception:
-                    pass
-        elif d['status'] == 'finished':
-            self.signals.progress.emit(self.item.id, 95, "processing")
-
-    def run(self):
-        try:
-            output_template = os.path.join(self.item.output_path, '%(title)s.%(ext)s')
-
-            # Add cookies if configured
-            cookies_opts = {}
-            if self.cookies_browser:
-                cookies_opts['cookiesfrombrowser'] = (self.cookies_browser,)
-
-            if self.item.format_type == 'audio':
-                audio_formats = {
-                    'MP3 - 320kbps': ('mp3', '320'),
-                    'MP3 - 256kbps': ('mp3', '256'),
-                    'MP3 - 192kbps': ('mp3', '192'),
-                    'MP3 - 128kbps': ('mp3', '128'),
-                    'AAC - 256kbps': ('aac', '256'),
-                    'AAC - 192kbps': ('aac', '192'),
-                    'FLAC (lossless)': ('flac', '0'),
-                    'WAV (lossless)': ('wav', '0'),
-                    'OGG - 320kbps': ('vorbis', '320'),
-                    'OGG - 192kbps': ('vorbis', '192'),
-                }
-
-                codec, bitrate = audio_formats.get(self.item.quality, ('mp3', '192'))
-
-                postprocessors = [
-                    {'key': 'FFmpegExtractAudio', 'preferredcodec': codec, 'preferredquality': bitrate},
-                ]
-                if self.embed_metadata:
-                    postprocessors += [
-                        {'key': 'FFmpegMetadata', 'add_metadata': True},
-                        {'key': 'EmbedThumbnail'},
-                    ]
-
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'outtmpl': output_template,
-                    'progress_hooks': [self.progress_hook],
-                    'postprocessor_hooks': [self.postprocessor_hook],
-                    'postprocessors': postprocessors,
-                    'writethumbnail': self.embed_metadata,
-                    'prefer_ffmpeg': True,
-                    'noplaylist': True,
-                    'socket_timeout': 30,
-                    'fragment_retries': 3,
-                    **cookies_opts,
-                }
-                if self.speed_limit > 0:
-                    ydl_opts['ratelimit'] = self.speed_limit * 1024
-            else:
-                resolution_formats = {
-                    'Best quality': 'bestvideo+bestaudio/best',
-                    'Najbolja kvaliteta': 'bestvideo+bestaudio/best',
-                    'Beste Qualität': 'bestvideo+bestaudio/best',
-                    '2160p (4K)': 'bestvideo[height<=2160]+bestaudio/best[height<=2160]/best',
-                    '1440p (2K)': 'bestvideo[height<=1440]+bestaudio/best[height<=1440]/best',
-                    '1080p (Full HD)': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
-                    '720p (HD)': 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
-                    '480p': 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
-                    '360p': 'bestvideo[height<=360]+bestaudio/best[height<=360]/best',
-                    '240p': 'bestvideo[height<=240]+bestaudio/best[height<=240]/best',
-                }
-
-                format_str = resolution_formats.get(self.item.quality, 'bestvideo+bestaudio/best')
-
-                ydl_opts = {
-                    'format': format_str,
-                    'outtmpl': output_template,
-                    'progress_hooks': [self.progress_hook],
-                    'postprocessor_hooks': [self.postprocessor_hook],
-                    'merge_output_format': 'mp4',
-                    'noplaylist': True,
-                    'socket_timeout': 30,
-                    'fragment_retries': 3,
-                    **cookies_opts,
-                }
-                if self.speed_limit > 0:
-                    ydl_opts['ratelimit'] = self.speed_limit * 1024
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(self.item.url, download=True)
-
-                # Use yt-dlp's own filename to get the actual path on disk
-                base_filepath = ydl.prepare_filename(info)
-                if self.item.format_type == 'audio':
-                    codec = audio_formats.get(self.item.quality, ('mp3', '192'))[0]
-                    if codec == 'vorbis':
-                        codec = 'ogg'
-                    filepath = os.path.splitext(base_filepath)[0] + f".{codec}"
-                else:
-                    filepath = os.path.splitext(base_filepath)[0] + ".mp4"
-
-            self.signals.progress.emit(self.item.id, 100, "done")
-            self.signals.finished.emit(self.item.id, "done", filepath)
-
-        except Exception as e:
-            error_msg = str(e)
-            log.error(f"❌ Download error: {error_msg}", exc_info=True)
-            self.signals.error.emit(self.item.id, error_msg)
-
-
-# ============ VIDEO ITEM WIDGET ============
-class VideoItemWidget(QWidget):
-    """Custom widget za prikaz video rezultata"""
-
-    def __init__(self, video_data: dict, parent=None):
-        super().__init__(parent)
-        self.video_data = video_data
-        self.setup_ui()
-
-    def setup_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
-
-        # Checkbox for multi-select
-        self.checkbox = QCheckBox()
-        self.checkbox.setStyleSheet("QCheckBox { spacing: 0px; } QCheckBox::indicator { width: 18px; height: 18px; }")
-        layout.addWidget(self.checkbox)
-
-        # Thumbnail
-        self.thumbnail_label = QLabel()
-        self.thumbnail_label.setFixedSize(160, 90)
-        self.thumbnail_label.setStyleSheet("""
-            QLabel {
-                background-color: #3c3c3c;
-                border-radius: 6px;
-                font-size: 24px;
-            }
-        """)
-        self.thumbnail_label.setAlignment(Qt.AlignCenter)
-        self.thumbnail_label.setText("🎬")
-        layout.addWidget(self.thumbnail_label)
-
-        # Info
-        info_widget = QWidget()
-        info_layout = QVBoxLayout(info_widget)
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(4)
-
-        title_label = QLabel(self.video_data.get('title', 'Unknown'))
-        title_label.setStyleSheet("color: white; font-weight: bold; font-size: 13px;")
-        title_label.setWordWrap(True)
-        title_label.setMaximumHeight(40)
-        info_layout.addWidget(title_label)
-
-        channel = self.video_data.get('channel', 'Unknown')
-        duration = self.video_data.get('duration', 0)
-        if duration:
-            duration = int(duration)
-            duration_str = f"{duration // 60}:{duration % 60:02d}"
-        else:
-            duration_str = "N/A"
-
-        meta_label = QLabel(f"📺 {channel}  |  ⏱️ {duration_str}")
-        meta_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-        info_layout.addWidget(meta_label)
-
-        views = self.video_data.get('view_count', 0)
-        if views:
-            if views >= 1000000:
-                views_str = f"👁️ {views / 1000000:.1f}M"
-            elif views >= 1000:
-                views_str = f"👁️ {views / 1000:.1f}K"
-            else:
-                views_str = f"👁️ {views}"
-            views_label = QLabel(views_str)
-            views_label.setStyleSheet("color: #888888; font-size: 11px;")
-            info_layout.addWidget(views_label)
-
-        info_layout.addStretch()
-        layout.addWidget(info_widget, 1)
-        self.setMinimumHeight(106)
-
-    def set_thumbnail(self, pixmap: QPixmap):
-        scaled = pixmap.scaled(160, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.thumbnail_label.setPixmap(scaled)
-
-    def sizeHint(self):
-        return QSize(400, 110)
-
-
-# ============ MAIN WINDOW ============
 class BalkGrabGrabber(QMainWindow):
-    """Glavni prozor aplikacije"""
+    """Main application window"""
 
     def __init__(self):
         super().__init__()
@@ -906,7 +59,7 @@ class BalkGrabGrabber(QMainWindow):
         self.resize(1100, 750)
 
         # Set window icon
-        icon_path = os.path.join(APP_DIR, "Icons", ICON_DIR, "icon_256x256.png")
+        icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_256x256.png")
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -992,313 +145,48 @@ class BalkGrabGrabber(QMainWindow):
         self.statusBar().showMessage(message)
 
     def setup_dark_theme(self):
-        """Setup dark theme"""
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #1e1e1e;
-                color: #ffffff;
+        """Setup theme based on saved preference"""
+        theme = self.settings.value("theme", "dark")
+        self.apply_theme(theme)
+
+    def apply_theme(self, theme_id: str):
+        """Apply the selected theme and update icons accordingly"""
+        app = QApplication.instance()
+        self._current_theme_id = theme_id
+        theme = get_theme(theme_id)
+
+        if theme is None:
+            # System default — no custom stylesheet
+            self.setStyleSheet("")
+            app.setPalette(self.style().standardPalette())
+            self._play_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+            self._stop_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop)
+        else:
+            self.setStyleSheet(theme["stylesheet"])
+            # Set app-wide palette for highlight colors (fixes KDE combo/menu highlighting)
+            palette = app.palette()
+            palette_map = {
+                "Highlight": QPalette.ColorRole.Highlight,
+                "HighlightedText": QPalette.ColorRole.HighlightedText,
+                "Window": QPalette.ColorRole.Window,
+                "WindowText": QPalette.ColorRole.WindowText,
+                "Base": QPalette.ColorRole.Base,
+                "Text": QPalette.ColorRole.Text,
             }
-            QTabWidget::pane {
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-                background-color: #1e1e1e;
-            }
-            QTabBar::tab {
-                background-color: #2d2d2d;
-                color: #888888;
-                padding: 12px 24px;
-                margin-right: 2px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                font-size: 13px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1e1e1e;
-                color: #00ff88;
-                font-weight: bold;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #3d3d3d;
-            }
-            QLineEdit {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 8px;
-                padding: 10px;
-                font-size: 14px;
-                color: white;
-            }
-            QLineEdit:focus {
-                border: 2px solid #00ff88;
-            }
-            QPushButton {
-                background-color: #00ff88;
-                color: #1a1a1a;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #00cc6a;
-            }
-            QPushButton:pressed {
-                background-color: #009950;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #888888;
-            }
-            QPushButton#downloadBtn {
-                background-color: #00ff88;
-                color: #1a1a1a;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 15px 40px;
-            }
-            QPushButton#downloadBtn:hover {
-                background-color: #00cc6a;
-            }
-            QPushButton#playBtn {
-                background-color: #00ff88;
-                font-size: 20px;
-                padding: 10px 30px;
-                min-width: 60px;
-            }
-            QPushButton#stopBtn {
-                background-color: #ff4444;
-                font-size: 16px;
-                padding: 10px 20px;
-            }
-            QListWidget {
-                background-color: #2d2d2d;
-                border: 1px solid #3d3d3d;
-                border-radius: 8px;
-                padding: 4px;
-                outline: none;
-            }
-            QListWidget::item {
-                background-color: #333333;
-                border: 1px solid #404040;
-                border-radius: 6px;
-                margin: 3px 2px;
-                padding: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #1a3d2a;
-                border: 1px solid #00ff88;
-            }
-            QListWidget::item:hover {
-                background-color: #3a3a3a;
-                border: 1px solid #555555;
-            }
-            QListWidget::item:hover:selected {
-                background-color: #1f4a32;
-                border: 1px solid #00ff88;
-            }
-            QComboBox {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 8px;
-                padding: 10px;
-                font-size: 13px;
-                min-width: 200px;
-            }
-            QComboBox:hover {
-                border: 2px solid #00ff88;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 30px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                selection-background-color: #00ff88;
-                selection-color: #1a1a1a;
-            }
-            QProgressBar {
-                background-color: #2d2d2d;
-                border: none;
-                border-radius: 8px;
-                height: 20px;
-                text-align: center;
-                color: #1a1a1a;
-                font-weight: bold;
-            }
-            QProgressBar::chunk {
-                background-color: #00ff88;
-                border-radius: 8px;
-            }
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
-                border: 2px solid #3d3d3d;
-                border-radius: 10px;
-                margin-top: 15px;
-                padding-top: 15px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 10px;
-            }
-            QRadioButton, QCheckBox {
-                font-size: 13px;
-                spacing: 8px;
-            }
-            QRadioButton::indicator, QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            QRadioButton::indicator:checked, QCheckBox::indicator:checked {
-                background-color: #00ff88;
-                border: 2px solid #00ff88;
-                border-radius: 9px;
-            }
-            QRadioButton::indicator:unchecked, QCheckBox::indicator:unchecked {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 9px;
-            }
-            QCheckBox::indicator {
-                border-radius: 4px;
-            }
-            QCheckBox::indicator:checked {
-                border-radius: 4px;
-            }
-            QSlider::groove:horizontal {
-                background: #3d3d3d;
-                height: 8px;
-                border-radius: 4px;
-            }
-            QSlider::handle:horizontal {
-                background: #00ff88;
-                width: 16px;
-                height: 16px;
-                margin: -4px 0;
-                border-radius: 8px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #00ff88;
-                border-radius: 4px;
-            }
-            QTableWidget {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 8px;
-                gridline-color: #3d3d3d;
-            }
-            QTableWidget::item {
-                padding: 8px;
-            }
-            QTableWidget::item:selected {
-                background-color: #00ff88;
-                color: #1a1a1a;
-            }
-            QHeaderView::section {
-                background-color: #2d2d2d;
-                color: #00ff88;
-                padding: 10px;
-                border: none;
-                font-weight: bold;
-            }
-            QTextEdit {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QSpinBox {
-                background-color: #2d2d2d;
-                border: 2px solid #3d3d3d;
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 13px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                background-color: #00ff88;
-                border: none;
-                width: 20px;
-            }
-            QSpinBox::up-button {
-                border-top-right-radius: 6px;
-            }
-            QSpinBox::down-button {
-                border-bottom-right-radius: 6px;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #00cc6a;
-            }
-            QSpinBox::up-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-bottom: 6px solid white;
-                width: 0;
-                height: 0;
-            }
-            QSpinBox::down-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid white;
-                width: 0;
-                height: 0;
-            }
-            QScrollBar:vertical {
-                background-color: #2d2d2d;
-                width: 12px;
-                border-radius: 6px;
-                margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #00ff88;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #00cc6a;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0;
-                background: none;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: #2d2d2d;
-            }
-            QScrollBar:horizontal {
-                background-color: #2d2d2d;
-                height: 12px;
-                border-radius: 6px;
-                margin: 0;
-            }
-            QScrollBar::handle:horizontal {
-                background-color: #00ff88;
-                border-radius: 6px;
-                min-width: 30px;
-            }
-            QScrollBar::handle:horizontal:hover {
-                background-color: #00cc6a;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0;
-                background: none;
-            }
-            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-                background: #2d2d2d;
-            }
-            QPushButton#secondaryBtn {
-                background-color: #3d3d3d;
-                color: white;
-                border: 2px solid #00ff88;
-            }
-            QPushButton#secondaryBtn:hover {
-                background-color: #4d4d4d;
-                border: 2px solid #00cc6a;
-            }
-        """)
+            for key, role in palette_map.items():
+                if key in theme.get("palette", {}):
+                    palette.setColor(role, QColor(theme["palette"][key]))
+            app.setPalette(palette)
+            # Use custom green icons for dark theme
+            self._play_icon = QIcon(os.path.join(ICON_BASE_DIR, ICON_DIR, "play_32x32.png"))
+            self._stop_icon = QIcon(os.path.join(ICON_BASE_DIR, ICON_DIR, "stop_32x32.png"))
+
+        # Update preview play button icon
+        if hasattr(self, 'preview_play_btn'):
+            if hasattr(self, 'preview_is_playing') and self.preview_is_playing:
+                self.preview_play_btn.setIcon(self._stop_icon)
+            else:
+                self.preview_play_btn.setIcon(self._play_icon)
 
     def setup_ui(self):
         """Setup main UI with tabs"""
@@ -1363,22 +251,20 @@ class BalkGrabGrabber(QMainWindow):
         self.search_input.setPlaceholderText(self.get_text('search_placeholder'))
         self.search_input.returnPressed.connect(self.do_search)
 
-        # Paste button inside the search field (right-aligned via layout)
-        paste_layout = QHBoxLayout(self.search_input)
-        paste_layout.setContentsMargins(0, 0, 4, 0)
-        paste_layout.addStretch()
-        self.paste_btn = QToolButton()
-        self.paste_btn.setText("📋")
-        self.paste_btn.setToolTip("Paste URL from clipboard")
-        self.paste_btn.setCursor(Qt.PointingHandCursor)
-        self.paste_btn.setFixedSize(28, 28)
-        self.paste_btn.setStyleSheet(
-            "QToolButton { border: none; background: transparent; font-size: 18px; }"
-            "QToolButton:hover { background: rgba(255,255,255,0.1); border-radius: 4px; }"
-        )
-        self.paste_btn.clicked.connect(self.paste_from_clipboard)
-        paste_layout.addWidget(self.paste_btn)
-        self.search_input.setTextMargins(0, 0, 32, 0)
+        # Trailing actions inside search field (proper Qt way)
+        # Paste action (always visible)
+        paste_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)
+        self.paste_action = self.search_input.addAction(paste_icon, QLineEdit.ActionPosition.TrailingPosition)
+        self.paste_action.setToolTip("Paste URL from clipboard")
+        self.paste_action.triggered.connect(self.paste_from_clipboard)
+
+        # Clear action (visible only when text is present)
+        clear_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_LineEditClearButton)
+        self.clear_action = self.search_input.addAction(clear_icon, QLineEdit.ActionPosition.TrailingPosition)
+        self.clear_action.setToolTip("Clear")
+        self.clear_action.setVisible(False)
+        self.clear_action.triggered.connect(self.search_input.clear)
+        self.search_input.textChanged.connect(lambda t: self.clear_action.setVisible(bool(t)))
         search_layout.addWidget(self.search_input, 1)
 
         self.search_btn = QPushButton(self.get_text('search_btn'))
@@ -1474,7 +360,7 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_thumbnail.setScaledContents(False)
         self.preview_thumbnail.setStyleSheet("background-color: #2d2d2d; border-radius: 8px;")
         self.preview_thumbnail.setAlignment(Qt.AlignCenter)
-        self.preview_thumbnail.setText(f"🎬\n\n{self.get_text('select_video')}")
+        self.preview_thumbnail.setText(f"\U0001f3ac\n\n{self.get_text('select_video')}")
         self.preview_thumbnail.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         preview_layout.addWidget(self.preview_thumbnail, alignment=Qt.AlignCenter)
 
@@ -1486,22 +372,16 @@ class BalkGrabGrabber(QMainWindow):
 
         # Play/Stop button (icon-based)
         self.preview_play_btn = QPushButton()
+        self.preview_play_btn.setObjectName("previewPlayBtn")
         self.preview_play_btn.setFixedSize(32, 32)
         self.preview_play_btn.setToolTip("Play / Stop")
         self.preview_play_btn.clicked.connect(self.toggle_preview_play)
         self.preview_play_btn.setEnabled(False)
         self.preview_is_playing = False
 
-        # Load play/stop icons
-        self._play_icon = QIcon(os.path.join(APP_DIR, "Icons", ICON_DIR, "play_32x32.png"))
-        self._stop_icon = QIcon(os.path.join(APP_DIR, "Icons", ICON_DIR, "stop_32x32.png"))
+        # Icons are set by apply_theme() called from setup_dark_theme()
         self.preview_play_btn.setIcon(self._play_icon)
         self.preview_play_btn.setIconSize(QSize(20, 20))
-        self.preview_play_btn.setStyleSheet("""
-            QPushButton { background-color: transparent; border: none; }
-            QPushButton:hover { background-color: rgba(0, 255, 136, 30); border-radius: 4px; }
-            QPushButton:disabled { opacity: 0.3; }
-        """)
         preview_controls_layout.addWidget(self.preview_play_btn)
 
         self.preview_time_current = QLabel("0:00")
@@ -1742,9 +622,9 @@ class BalkGrabGrabber(QMainWindow):
         lang_layout = QHBoxLayout(lang_group)
 
         self.language_combo = QComboBox()
-        self.language_combo.addItem("🇬🇧 English", "en")
-        self.language_combo.addItem("🇩🇪 Deutsch", "de")
-        self.language_combo.addItem("🇭🇷🇷🇸 Hrvatski/Srpski", "hr")
+        self.language_combo.addItem("\U0001f1ec\U0001f1e7 English", "en")
+        self.language_combo.addItem("\U0001f1e9\U0001f1ea Deutsch", "de")
+        self.language_combo.addItem("\U0001f1ed\U0001f1f7\U0001f1f7\U0001f1f8 Hrvatski/Srpski", "hr")
 
         # Set current
         for i in range(self.language_combo.count()):
@@ -1759,6 +639,26 @@ class BalkGrabGrabber(QMainWindow):
         # Appearance
         appearance_group = QGroupBox(self.get_text('appearance'))
         appearance_layout = QVBoxLayout(appearance_group)
+
+        # Theme dropdown
+        theme_layout = QHBoxLayout()
+        theme_label = QLabel(self.get_text('theme'))
+        theme_layout.addWidget(theme_label)
+
+        self.theme_combo = QComboBox()
+        current_theme = self.settings.value("theme", "dark")
+        for theme_id, theme_name in get_available_themes():
+            # Use translation if available, otherwise use theme name
+            tr_key = f"theme_{theme_id}"
+            display = self.tr.get(tr_key, theme_name)
+            self.theme_combo.addItem(display, theme_id)
+        for i in range(self.theme_combo.count()):
+            if self.theme_combo.itemData(i) == current_theme:
+                self.theme_combo.setCurrentIndex(i)
+                break
+        theme_layout.addWidget(self.theme_combo)
+        theme_layout.addStretch()
+        appearance_layout.addLayout(theme_layout)
 
         self.tray_checkbox = QCheckBox(self.get_text('system_tray'))
         self.tray_checkbox.setChecked(self.settings.value("show_tray", True, type=bool))
@@ -1917,10 +817,42 @@ class BalkGrabGrabber(QMainWindow):
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(15)
 
+        # Header: icon + app name + version
+        header = QHBoxLayout()
+        header.setSpacing(15)
+        header.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        icon_label = QLabel()
+        icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_256x256.png")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path).scaled(
+                64, 64,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            icon_label.setPixmap(pixmap)
+        icon_label.setFixedSize(64, 64)
+        header.addWidget(icon_label)
+
+        title_layout = QVBoxLayout()
+        title_layout.setSpacing(2)
+        title_label = QLabel("BalkGrab")
+        title_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+        version_label = QLabel(f"v{APP_VERSION}")
+        version_label.setStyleSheet("font-size: 13px; color: #888888;")
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(version_label)
+        title_layout.addStretch()
+        header.addLayout(title_layout)
+        header.addStretch()
+
+        layout.addLayout(header)
+
         # About text - expands to fill space
-        about_text = QTextEdit()
+        about_text = QTextBrowser()
         about_text.setReadOnly(True)
-        about_text.setHtml(self.get_text('about_description', version=APP_VERSION))
+        about_text.setOpenExternalLinks(True)
+        about_text.setHtml(self.get_text('about_description'))
         layout.addWidget(about_text, 1)  # stretch factor 1 = expand
 
         # Buttons at bottom
@@ -1949,7 +881,7 @@ class BalkGrabGrabber(QMainWindow):
 
     def show_license_dialog(self):
         """Show license in a popup dialog"""
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox
+        from PySide6.QtWidgets import QDialogButtonBox
 
         dialog = QDialog(self)
         dialog.setWindowTitle(self.get_text('license_title'))
@@ -1995,13 +927,7 @@ class BalkGrabGrabber(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray_icon = QSystemTrayIcon(self)
 
-            # Load icon from file or use fallback (platform-aware)
-            if sys.platform == "win32":
-                icon_path = os.path.join(APP_DIR, "Icons", "windows", "icon.ico")
-                if not os.path.exists(icon_path):
-                    icon_path = os.path.join(APP_DIR, "Icons", "windows", "icon_64x64.png")
-            else:
-                icon_path = os.path.join(APP_DIR, "Icons", "linux", "icon_64x64.png")
+            icon_path = os.path.join(ICON_BASE_DIR, ICON_DIR, "icon_64x64.png")
             if os.path.exists(icon_path):
                 self.tray_icon.setIcon(QIcon(icon_path))
             else:
@@ -2010,19 +936,19 @@ class BalkGrabGrabber(QMainWindow):
                 self.tray_icon.setIcon(QIcon(pixmap))
 
             # Menu
-            tray_menu = QMenu()
+            self.tray_menu = QMenu()
 
             show_action = QAction("Show", self)
             show_action.triggered.connect(self.show)
-            tray_menu.addAction(show_action)
+            self.tray_menu.addAction(show_action)
 
-            tray_menu.addSeparator()
+            self.tray_menu.addSeparator()
 
             quit_action = QAction("Quit", self)
             quit_action.triggered.connect(QApplication.quit)
-            tray_menu.addAction(quit_action)
+            self.tray_menu.addAction(quit_action)
 
-            self.tray_icon.setContextMenu(tray_menu)
+            self.tray_icon.setContextMenu(self.tray_menu)
             self.tray_icon.activated.connect(self.tray_activated)
 
             if self.settings.value("show_tray", True, type=bool):
@@ -2091,6 +1017,11 @@ class BalkGrabGrabber(QMainWindow):
         self.settings.setValue("auto_play", self.auto_play_checkbox.isChecked())
         self.settings.setValue("output_path", self.output_path)
         self.settings.setValue("cookies_browser", self.cookies_browser_combo.currentData())
+
+        # Apply theme
+        new_theme = self.theme_combo.currentData()
+        self.settings.setValue("theme", new_theme)
+        self.apply_theme(new_theme)
 
         # Update tray visibility
         if self.tray_icon:
@@ -2237,12 +1168,12 @@ class BalkGrabGrabber(QMainWindow):
             if current != text:
                 self.search_input.setText(text)
                 self.set_statusbar("Video link detected in clipboard!")
-                log.info(f"📋 Clipboard intercepted: {text[:60]}...")
+                log.info(f"Clipboard intercepted: {text[:60]}...")
 
     def do_search(self):
         """Start search"""
         query = self.search_input.text().strip()
-        log.info(f"🔍 Search: '{query}'")
+        log.info(f"Search: '{query}'")
 
         # Clear any error from previous search
         self._last_fetch_error = None
@@ -2340,13 +1271,6 @@ class BalkGrabGrabber(QMainWindow):
             'brave': os.path.expanduser('~/.config/BraveSoftware/Brave-Browser'),
             'edge': os.path.expanduser('~/.config/microsoft-edge'),
         }
-        if sys.platform == 'win32':
-            browser_paths = {
-                'firefox': os.path.join(os.environ.get('APPDATA', ''), 'Mozilla', 'Firefox', 'Profiles'),
-                'chrome': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data'),
-                'edge': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Edge', 'User Data'),
-                'brave': os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware', 'Brave-Browser', 'User Data'),
-            }
         for browser, path in browser_paths.items():
             if os.path.isdir(path):
                 return browser
@@ -2381,7 +1305,7 @@ class BalkGrabGrabber(QMainWindow):
                         }
                         videos.append(video)
 
-            log.info(f"📋 Playlist info: {len(videos)} videos found")
+            log.info(f"Playlist info: {len(videos)} videos found")
             self.signals.playlist_info.emit(url, videos)
 
         except Exception as e:
@@ -2503,7 +1427,7 @@ class BalkGrabGrabber(QMainWindow):
 
             # Safety: if playlist leaked through despite noplaylist, use first entry
             if 'entries' in info and info['entries']:
-                info = info['entries'][0]
+                info = info['entries'][0] or {}
 
             video = {
                 'url': url,
@@ -2524,7 +1448,6 @@ class BalkGrabGrabber(QMainWindow):
             short_msg = error_msg.split(': ')[-1] if ': ' in error_msg else error_msg
             self._last_fetch_error = short_msg
             self.signals.search_results.emit([])
-
 
     def load_preview_thumbnail(self, url: str):
         """Load preview thumbnail"""
@@ -2552,7 +1475,7 @@ class BalkGrabGrabber(QMainWindow):
     @Slot(list)
     def on_search_results(self, videos: List[Dict]):
         """Handle search results"""
-        log.info(f"📋 Received {len(videos)} results")
+        log.info(f"Received {len(videos)} results")
 
         self.search_btn.setEnabled(True)
         self.search_btn.setText(self.get_text('search_btn'))
@@ -2644,6 +1567,13 @@ class BalkGrabGrabber(QMainWindow):
         """Handle video selection"""
         index = item.data(Qt.UserRole)
         if index is not None and index < len(self.current_videos):
+            # In playlist mode, clicking the row toggles the checkbox
+            if self._playlist_mode:
+                widget = self.results_list.itemWidget(item)
+                if widget and isinstance(widget, VideoItemWidget):
+                    widget.checkbox.setChecked(not widget.checkbox.isChecked())
+                return
+
             self.selected_video = self.current_videos[index]
 
             self.preview_title.setText(self.selected_video.get('title', 'Unknown'))
@@ -2655,7 +1585,7 @@ class BalkGrabGrabber(QMainWindow):
             else:
                 duration_str = "N/A"
 
-            self.preview_meta.setText(f"📺 {self.selected_video.get('channel', '')} | ⏱️ {duration_str}")
+            self.preview_meta.setText(f"\U0001f4fa {self.selected_video.get('channel', '')} | \u23f1\ufe0f {duration_str}")
 
             if self.selected_video.get('thumbnail'):
                 self.load_preview_thumbnail(self.selected_video['thumbnail'])
@@ -2675,7 +1605,7 @@ class BalkGrabGrabber(QMainWindow):
     # ============ PLAYLIST SELECTION METHODS ============
     def _on_video_checkbox_changed(self, state):
         """O(1) update when a single checkbox is toggled"""
-        self._selected_count += 1 if state == Qt.Checked else -1
+        self._selected_count += 1 if int(state) == 2 else -1
         self._selected_count = max(0, self._selected_count)
         self._refresh_selection_ui()
 
@@ -2687,7 +1617,7 @@ class BalkGrabGrabber(QMainWindow):
         self.download_selected_btn.setEnabled(self._selected_count > 0)
 
     def update_selection_count(self):
-        """Full O(n) recount — call after bulk changes (new results, select/deselect all)"""
+        """Full O(n) recount - call after bulk changes (new results, select/deselect all)"""
         count = 0
         for row in range(self.results_list.count()):
             item = self.results_list.item(row)
@@ -2766,7 +1696,7 @@ class BalkGrabGrabber(QMainWindow):
         self._flush_download_queue()
         self.set_statusbar(f"Queued {len(selected)} videos for download")
         self.save_downloads()
-        log.info(f"⬇️ Batch download queued: {len(selected)} videos")
+        log.info(f"Batch download queued: {len(selected)} videos")
         # Reset checkboxes and button after queueing
         self.deselect_all_videos()
 
@@ -2778,7 +1708,7 @@ class BalkGrabGrabber(QMainWindow):
         speed_limit = self.settings.value("speed_limit", 0, type=int)
 
         while self._download_queue:
-            # O(1) — set is kept accurate by on_download_finished/on_download_error
+            # O(1) - set is kept accurate by on_download_finished/on_download_error
             if len(self._active_batch_downloads) >= max_concurrent:
                 break
 
@@ -2789,10 +1719,10 @@ class BalkGrabGrabber(QMainWindow):
                 self.download_workers[download_id] = worker
                 self._active_batch_downloads.add(download_id)
                 worker.start()
-                log.info(f"⬇️ Starting queued download: {download.title}")
+                log.info(f"Starting queued download: {download.title}")
 
         if self._download_queue:
-            log.info(f"⏳ {len(self._download_queue)} downloads waiting in queue")
+            log.info(f"{len(self._download_queue)} downloads waiting in queue")
 
     # ============ PREVIEW PLAYER METHODS ============
     def toggle_preview_play(self):
@@ -2837,6 +1767,7 @@ class BalkGrabGrabber(QMainWindow):
                 'format': 'bestaudio[ext=m4a][abr<=128]/bestaudio[ext=m4a]/bestaudio[abr<=128]/bestaudio/worst',
                 'outtmpl': os.path.join(tmp_dir, 'preview.%(ext)s'),
                 'noplaylist': True,
+                'remote_components': ['ejs:github'],
             }
             cookies_browser = self.settings.value("cookies_browser", "", type=str)
             if cookies_browser:
@@ -2878,7 +1809,7 @@ class BalkGrabGrabber(QMainWindow):
         self._set_preview_btn_play()
         self.preview_play_btn.setEnabled(True)
         self._cleanup_preview_temp()
-        self.status_label.setText("Preview failed ❌")
+        self.status_label.setText("Preview failed")
 
     def _cleanup_preview_temp(self):
         """Delete current temp preview file"""
@@ -2916,8 +1847,9 @@ class BalkGrabGrabber(QMainWindow):
 
     def preview_seek_position(self, position):
         """Seek preview"""
-        if self.preview_player.duration() > 0:
-            self.preview_player.setPosition(int(position * self.preview_player.duration() / 100))
+        duration = self.preview_player.duration()
+        if duration > 0:
+            self.preview_player.setPosition(int(position * duration / 100))
             if self.preview_is_playing:
                 self.status_label.setText("Buffering, please wait...")
 
@@ -2950,8 +1882,9 @@ class BalkGrabGrabber(QMainWindow):
                 self._preview_stall_count = 0
             self._preview_last_position = position
 
-        if not self.preview_slider_pressed_flag and self.preview_player.duration() > 0:
-            self.preview_seek_slider.setValue(int(position * 100 / self.preview_player.duration()))
+        duration = self.preview_player.duration()
+        if not self.preview_slider_pressed_flag and duration > 0:
+            self.preview_seek_slider.setValue(int(position * 100 / duration))
         secs = position // 1000
         self.preview_time_current.setText(f"{secs // 60}:{secs % 60:02d}")
 
@@ -2970,7 +1903,7 @@ class BalkGrabGrabber(QMainWindow):
             self.preview_play_btn.setEnabled(False)
             self.status_label.setText("Refreshing stream...")
 
-            # Re-fetch fresh stream URL — snapshot selected_video on GUI thread to avoid race
+            # Re-fetch fresh stream URL - snapshot selected_video on GUI thread to avoid race
             _sv = self.selected_video
             if _sv:
                 url = _sv.get('url', '')
@@ -3030,7 +1963,7 @@ class BalkGrabGrabber(QMainWindow):
             else:
                 return
 
-        # Block channel/playlist URLs — would download entire channel
+        # Block channel/playlist URLs - would download entire channel
         if self.is_youtube_url(url) and not self.is_youtube_video_url(url):
             QMessageBox.warning(self, "Cannot Download",
                 "This result is a channel or playlist, not a specific video.\n"
@@ -3069,7 +2002,7 @@ class BalkGrabGrabber(QMainWindow):
         self.status_label.setText(self.get_text('downloading', percent=0))
 
         self.set_statusbar(f"Downloading: {download.title}")
-        log.info(f"⬇️ Started download: {download.title}")
+        log.info(f"Started download: {download.title}")
 
     def stop_active_download(self):
         """Stop the currently active download"""
@@ -3080,7 +2013,7 @@ class BalkGrabGrabber(QMainWindow):
         if download_id in self.download_workers:
             worker = self.download_workers[download_id]
             worker.cancel()
-            log.info(f"⏹ Stopping download: {download_id}")
+            log.info(f"Stopping download: {download_id}")
 
         self.set_statusbar("Download stopped")
         self._reset_download_btn()
@@ -3126,7 +2059,7 @@ class BalkGrabGrabber(QMainWindow):
         # Set initial state based on whether loading from history
         if from_history:
             progress_bar.setValue(100)
-            play_btn.setText("▶ Play")
+            play_btn.setText("\u25b6 Play")
             play_btn.setProperty("btn_state", "idle")
             if download.status == 'done':
                 if download.format_type == 'audio':
@@ -3145,7 +2078,7 @@ class BalkGrabGrabber(QMainWindow):
             progress_bar.setValue(0)
             status_item.setText("Waiting...")
             status_item.setForeground(QColor("#888888"))
-            play_btn.setText("✕ Cancel")
+            play_btn.setText("\u2715 Cancel")
             play_btn.setProperty("btn_state", "downloading")
             play_btn.setEnabled(True)
             play_btn.setStyleSheet("color: #ff8800; font-weight: bold;")
@@ -3154,7 +2087,7 @@ class BalkGrabGrabber(QMainWindow):
         self._download_row_map[download.id] = row
 
     def _rebuild_row_map(self):
-        """Rebuild the download_id→row map after row removals."""
+        """Rebuild the download_id->row map after row removals."""
         self._download_row_map.clear()
         for r in range(self.downloads_table.rowCount()):
             item = self.downloads_table.item(r, 0)
@@ -3207,7 +2140,7 @@ class BalkGrabGrabber(QMainWindow):
     @Slot(str, str, str)
     def on_download_finished(self, download_id: str, status: str, filepath: str):
         """Handle download finished"""
-        log.info(f"✅ Download finished: {download_id}")
+        log.info(f"Download finished: {download_id}")
 
         if download_id in self.downloads:
             self.downloads[download_id].status = "done"
@@ -3233,7 +2166,7 @@ class BalkGrabGrabber(QMainWindow):
 
                 play_btn = self.downloads_table.cellWidget(row, 3)
                 if play_btn:
-                    play_btn.setText("▶ Play")
+                    play_btn.setText("\u25b6 Play")
                     play_btn.setProperty("btn_state", "idle")
                     play_btn.setStyleSheet("")
                     play_btn.setEnabled(True)
@@ -3282,7 +2215,7 @@ class BalkGrabGrabber(QMainWindow):
     @Slot(str, str)
     def on_download_error(self, download_id: str, error: str):
         """Handle download/search error"""
-        log.error(f"❌ Download error: {error}")
+        log.error(f"Download error: {error}")
 
         # Search errors don't have a download entry
         if download_id == "search":
@@ -3306,7 +2239,7 @@ class BalkGrabGrabber(QMainWindow):
                     status_item.setForeground(QColor("#ff4444"))
                 play_btn = self.downloads_table.cellWidget(row, 3)
                 if play_btn:
-                    play_btn.setText("▶ Play")
+                    play_btn.setText("\u25b6 Play")
                     play_btn.setProperty("btn_state", "idle")
                     play_btn.setStyleSheet("")
                     play_btn.setEnabled(False)
@@ -3342,7 +2275,7 @@ class BalkGrabGrabber(QMainWindow):
             filepath = download.filepath
 
             if filepath and os.path.exists(filepath):
-                log.info(f"▶️ Playing: {filepath}")
+                log.info(f"Playing: {filepath}")
 
                 # Stop all other audio first
                 self.stop_all_audio()
@@ -3368,9 +2301,9 @@ class BalkGrabGrabber(QMainWindow):
         """Cancel an in-progress download via the table button"""
         if download_id in self.download_workers:
             self.download_workers[download_id].cancel()
-            log.info(f"✕ Cancelled download: {download_id}")
+            log.info(f"Cancelled download: {download_id}")
 
-        btn.setText("▶ Play")
+        btn.setText("\u25b6 Play")
         btn.setProperty("btn_state", "idle")
         btn.setStyleSheet("")
         btn.setEnabled(False)
@@ -3411,7 +2344,7 @@ class BalkGrabGrabber(QMainWindow):
                     if download.format_type == 'video':
                         self.kill_external_player()
                         self.play_video_external(filepath, download.title)
-                        btn.setText("⏹ Stop")
+                        btn.setText("\u23f9 Stop")
                         btn.setProperty("btn_state", "playing")
                         self.current_playing_download_id = download_id
                         self.current_playing_btn = btn
@@ -3424,7 +2357,7 @@ class BalkGrabGrabber(QMainWindow):
                         self.player_is_playing = True
                         self.position_timer.start(1000)
 
-                        btn.setText("⏹ Stop")
+                        btn.setText("\u23f9 Stop")
                         btn.setProperty("btn_state", "playing")
                         self.current_playing_download_id = download_id
                         self.current_playing_btn = btn
@@ -3455,7 +2388,7 @@ class BalkGrabGrabber(QMainWindow):
 
         # Reset table button if playing from downloads
         if self.current_playing_btn:
-            self.current_playing_btn.setText("▶ Play")
+            self.current_playing_btn.setText("\u25b6 Play")
             self.current_playing_btn.setProperty("btn_state", "idle")
             self.current_playing_btn = None
             self.current_playing_download_id = None
@@ -3484,7 +2417,7 @@ class BalkGrabGrabber(QMainWindow):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
-            log.info(f"▶️ Playing video in {video_player}: {title}")
+            log.info(f"Playing video in {video_player}: {title}")
             self.now_playing_label.setText(f"{self.get_text('now_playing')} {title}")
 
             # Monitor external player so we reset button when it closes
@@ -3526,7 +2459,7 @@ class BalkGrabGrabber(QMainWindow):
             log.info("External player closed, resetting button state")
             # Reset the play button in downloads table
             if self.current_playing_btn:
-                self.current_playing_btn.setText("▶ Play")
+                self.current_playing_btn.setText("\u25b6 Play")
                 self.current_playing_btn.setProperty("btn_state", "idle")
                 self.current_playing_btn = None
                 self.current_playing_download_id = None
@@ -3600,8 +2533,9 @@ class BalkGrabGrabber(QMainWindow):
 
     def seek_position(self, position):
         """Seek to position"""
-        if self.media_player.duration() > 0:
-            new_pos = int(position * self.media_player.duration() / 100)
+        duration = self.media_player.duration()
+        if duration > 0:
+            new_pos = int(position * duration / 100)
             self.media_player.setPosition(new_pos)
 
     def slider_pressed(self):
@@ -3624,8 +2558,9 @@ class BalkGrabGrabber(QMainWindow):
 
     def on_position_changed(self, position):
         """Handle position change"""
-        if not self.slider_is_pressed and self.media_player.duration() > 0:
-            percent = int(position * 100 / self.media_player.duration())
+        duration = self.media_player.duration()
+        if not self.slider_is_pressed and duration > 0:
+            percent = int(position * 100 / duration)
             self.seek_slider.setValue(percent)
 
         # Update time label
@@ -3647,7 +2582,7 @@ class BalkGrabGrabber(QMainWindow):
     def _set_player_btn_play(self):
         """Reset the current playing button to Play state"""
         if self.current_playing_btn:
-            self.current_playing_btn.setText("▶ Play")
+            self.current_playing_btn.setText("\u25b6 Play")
             self.current_playing_btn.setProperty("btn_state", "idle")
             self.current_playing_btn = None
             self.current_playing_download_id = None
@@ -3681,6 +2616,16 @@ class BalkGrabGrabber(QMainWindow):
         """Open downloads folder"""
         QDesktopServices.openUrl(QUrl.fromLocalFile(self.output_path))
 
+    def _style_context_menu(self, menu: QMenu):
+        """Apply stylesheet + palette to context menu for reliable highlighting on KDE/Plasma"""
+        theme = get_theme(getattr(self, '_current_theme_id', 'dark'))
+        if theme and "menu_style" in theme:
+            menu.setStyleSheet(theme["menu_style"])
+            palette = menu.palette()
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(theme["palette"].get("Highlight", "#00aa44")))
+            palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+            menu.setPalette(palette)
+
     def show_video_context_menu(self, pos):
         """Right-click context menu on search results list"""
         item = self.results_list.itemAt(pos)
@@ -3699,25 +2644,25 @@ class BalkGrabGrabber(QMainWindow):
         title = video.get('title', '')
 
         menu = QMenu(self)
-        menu.setStyleSheet(_MENU_STYLE)
+        self._style_context_menu(menu)
 
-        dl_action = menu.addAction('⬇️  ' + self.get_text('download_btn'))
+        dl_action = menu.addAction('\u2b07\ufe0f  ' + self.get_text('download_btn'))
         dl_action.setEnabled(bool(url))
         dl_action.triggered.connect(lambda: self._ctx_download_video(video))
 
         menu.addSeparator()
 
-        copy_url_action = menu.addAction('🔗  ' + self.get_text('copy_url'))
+        copy_url_action = menu.addAction('\U0001f517  ' + self.get_text('copy_url'))
         copy_url_action.setEnabled(bool(url))
         copy_url_action.triggered.connect(lambda: QApplication.clipboard().setText(url))
 
-        copy_title_action = menu.addAction('📋  ' + self.get_text('copy_title'))
+        copy_title_action = menu.addAction('\U0001f4cb  ' + self.get_text('copy_title'))
         copy_title_action.setEnabled(bool(title))
         copy_title_action.triggered.connect(lambda: QApplication.clipboard().setText(title))
 
         menu.addSeparator()
 
-        open_action = menu.addAction('🌐  ' + self.get_text('open_in_browser'))
+        open_action = menu.addAction('\U0001f310  ' + self.get_text('open_in_browser'))
         open_action.setEnabled(bool(url))
         open_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
 
@@ -3744,33 +2689,33 @@ class BalkGrabGrabber(QMainWindow):
 
         download = self.downloads[download_id]
         menu = QMenu(self)
-        menu.setStyleSheet(_MENU_STYLE)
+        self._style_context_menu(menu)
 
         file_exists = download.filepath and os.path.exists(download.filepath)
         is_done = download.status == 'done'
 
         # Play
-        play_action = menu.addAction(f"▶ {self.get_text('ctx_play')}")
+        play_action = menu.addAction(f"\u25b6 {self.get_text('ctx_play')}")
         play_action.setEnabled(file_exists and is_done)
         play_action.triggered.connect(lambda: self._ctx_play(download_id, row))
 
         menu.addSeparator()
 
         # Open containing folder
-        open_action = menu.addAction(f"📂 {self.get_text('ctx_open_folder')}")
+        open_action = menu.addAction(f"\U0001f4c2 {self.get_text('ctx_open_folder')}")
         open_action.setEnabled(file_exists)
         open_action.triggered.connect(lambda: self._ctx_open_folder(download))
 
         # Download again
-        again_action = menu.addAction(f"⬇ {self.get_text('ctx_download_again')}")
+        again_action = menu.addAction(f"\u2b07 {self.get_text('ctx_download_again')}")
         again_action.setEnabled(bool(download.url))
         again_action.triggered.connect(lambda: self._ctx_download_again(download))
 
         menu.addSeparator()
 
         # Convert to submenu
-        convert_menu = menu.addMenu(f"🔄 {self.get_text('ctx_convert_to')}")
-        convert_menu.setStyleSheet(menu.styleSheet())
+        convert_menu = menu.addMenu(f"\U0001f504 {self.get_text('ctx_convert_to')}")
+        self._style_context_menu(convert_menu)
         convert_menu.setEnabled(file_exists and is_done)
         for fmt in ['MP3', 'MP4', 'FLAC', 'WAV', 'OGG', 'AAC']:
             action = convert_menu.addAction(fmt)
@@ -3779,7 +2724,7 @@ class BalkGrabGrabber(QMainWindow):
         menu.addSeparator()
 
         # Remove from list
-        remove_action = menu.addAction(f"🗑 {self.get_text('ctx_remove')}")
+        remove_action = menu.addAction(f"\U0001f5d1 {self.get_text('ctx_remove')}")
         remove_action.triggered.connect(lambda: self._ctx_remove(download_id, row))
 
         menu.exec(self.downloads_table.viewport().mapToGlobal(pos))
@@ -3797,12 +2742,29 @@ class BalkGrabGrabber(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _ctx_download_again(self, download: DownloadItem):
-        """Context menu: Download again - switch to Search tab with URL"""
-        if download.url:
-            self.tab_widget.setCurrentIndex(0)
-            self.search_input.setText(download.url)
-            self.search_input.setFocus()
-            self.do_search()
+        """Context menu: Download again - directly start a new download"""
+        if not download.url:
+            return
+
+        new_download = DownloadItem(
+            url=download.url,
+            title=download.title,
+            output_path=self.output_path,
+            format_type=download.format_type,
+            quality=download.quality
+        )
+        self.downloads[new_download.id] = new_download
+        self.add_download_to_table(new_download)
+
+        cookies_browser = self.settings.value("cookies_browser", "", type=str)
+        embed_metadata = self.settings.value("embed_metadata", True, type=bool)
+        speed_limit = self.settings.value("speed_limit", 0, type=int)
+        worker = DownloadWorker(new_download, self.signals, cookies_browser, embed_metadata, speed_limit)
+        self.download_workers[new_download.id] = worker
+        worker.start()
+
+        self.set_statusbar(f"Re-downloading: {new_download.title}")
+        log.info(f"Re-download started: {new_download.title}")
 
     def _ctx_convert(self, download: DownloadItem, target_fmt: str):
         """Context menu: Convert file using FFmpeg (background process with QTimer polling)"""
@@ -3840,7 +2802,7 @@ class BalkGrabGrabber(QMainWindow):
             dest = f"{base}_{counter}.{ext}"
 
         self.set_statusbar(self.get_text('converting_file', fmt=target_fmt))
-        log.info(f"Converting: {source} → {dest}")
+        log.info(f"Converting: {source} -> {dest}")
 
         cmd = ['ffmpeg', '-i', source, '-y']
         if ext == 'mp3':
@@ -3872,11 +2834,13 @@ class BalkGrabGrabber(QMainWindow):
                     self.set_statusbar(self.get_text('conversion_done', fmt=target_fmt))
                     log.info(f"Conversion complete: {dest}")
                 else:
-                    if proc.stderr:
-                        stderr = proc.stderr.read().decode(errors='replace')[-200:]
-                        proc.stderr.close()
-                    else:
-                        stderr = ""
+                    stderr = ""
+                    try:
+                        if proc.stderr:
+                            stderr = proc.stderr.read().decode(errors='replace')[-200:]
+                            proc.stderr.close()
+                    except Exception:
+                        pass
                     self.set_statusbar(self.get_text('conversion_failed', error=stderr[:100]), error=True)
                     log.error(f"Conversion failed: {stderr}")
         timer.timeout.connect(check_done)
@@ -3971,38 +2935,3 @@ class BalkGrabGrabber(QMainWindow):
 
             # Force quit application
             QApplication.quit()
-
-
-# ============ MAIN ============
-def main():
-    log.info("=" * 50)
-    log.info(f"🎵 {APP_NAME} v{APP_VERSION} - Starting...")
-    log.info("=" * 50)
-
-    app = QApplication(sys.argv)
-    app.setStyle('Fusion')
-    app.setApplicationName(APP_NAME)
-    app.setOrganizationName("BalkGrab")
-
-    # Set application icon
-    icon_path = os.path.join(APP_DIR, "Icons", ICON_DIR, "icon_256x256.png")
-    if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
-
-    window = BalkGrabGrabber()
-
-    # Check start minimized
-    settings = QSettings("BalkGrab", "BalkGrab")
-    if settings.value("start_minimized", False, type=bool):
-        window.hide()
-    else:
-        window.show()
-
-    log.info("🚀 Application started!")
-    log.info("-" * 50)
-
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()

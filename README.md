@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Icons/linux/icon_256x256.png" alt="BalkGrab Logo" width="128"/>
+  <img src="balkgrab/Icons/linux/icon_256x256.png" alt="BalkGrab Logo" width="128"/>
 </p>
 
 <h1 align="center">BalkGrab</h1>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.1-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-0.4.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/python-3.9+-blue?style=for-the-badge&logo=python" alt="Python"/>
   <img src="https://img.shields.io/badge/PySide6-Qt-41CD52?style=for-the-badge&logo=qt" alt="PySide6"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License"/>
@@ -45,68 +45,42 @@
 - **Built-in Media Player** - Play downloaded files instantly
 - **File Conversion** - Right-click to convert downloaded files (MP3, MP4, FLAC, WAV, OGG, AAC)
 - **Multi-Language** - English, Deutsch, Hrvatski/Srpski
-- **Dark Theme** - Modern UI with system tray support
+- **Themes** - BalkGrab Dark, Nord, Dracula, Catppuccin Mocha, Gruvbox, Arc Dark, Tokyo Night, or System Default
+- **System Tray** - Minimize to tray, background playback, desktop notifications
 - **Browser Cookies** - Auto-detect browser for age-restricted content
 
 ---
 
 ## Installation
 
-### Linux (Recommended)
-
-Download `BalkGrab-linux-x86_64.tar.gz` from the [Releases](https://github.com/NeleBiH/BalkGrab/releases) page:
+### Quick Install (Recommended)
 
 ```bash
-tar xzf BalkGrab-linux-x86_64.tar.gz
+git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
-./setup_BalkGrab.sh
+./balkgrab/setup_BalkGrab.sh
 ```
 
 Choose **1) Install / Update** from the menu. The setup script will:
 - Detect your distro and install system dependencies (`python3`, `ffmpeg`) via `pacman` / `apt` / `dnf` / `zypper` / `xbps` / `emerge` / `apk`
 - Create a Python virtualenv at `~/.balkgrab/.venv` and install `PySide6`, `yt-dlp`, `requests`
-- Copy `BalkGrab.py` to `~/.balkgrab/` and create a launcher
+- Copy the `balkgrab` package to `~/.balkgrab/` and create a launcher
 - Install icons and create a menu entry (works on GNOME, KDE, XFCE, MATE, Cinnamon, LXDE and others)
 - Install deno (needed for YouTube downloads)
 
-After installation, find **BalkGrab** in your application menu or run `~/.balkgrab/balkgrab`.
+After installation, find **BalkGrab** in your application menu or run `balkgrab` from terminal.
 
-**Updating** is just as easy - run `./setup_BalkGrab.sh` again and choose **1) Install / Update**. Your settings and download history are always preserved.
+### Updating
 
-### Linux - Portable AppImage
+Run the setup script again and choose **1) Install / Update**. Your settings and download history are always preserved.
 
-Download the `.AppImage` file from the [Releases](https://github.com/NeleBiH/BalkGrab/releases) page:
-
-```bash
-chmod +x BalkGrab-*.AppImage
-./BalkGrab-*.AppImage
-```
-
-No installation needed - fully self-contained. Note: no menu entry or desktop integration.
-
-### Linux - Packages
-
-- **Debian / Ubuntu / Mint:** Download `balkgrab_0.3.1_amd64.deb`
-  ```bash
-  sudo apt install ./balkgrab_0.3.1_amd64.deb
-  ```
-- **Fedora / openSUSE:** Download `balkgrab-0.3.1-1.x86_64.rpm`
-  ```bash
-  sudo dnf install balkgrab-0.3.1-1.x86_64.rpm
-  ```
-
-### From Source
+### Run from Source (without installing)
 
 ```bash
 git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
-./setup_BalkGrab.sh
-```
-
-Or run directly without installing:
-
-```bash
-./run.sh
+pip install PySide6 yt-dlp requests
+python -m balkgrab
 ```
 
 ---
@@ -114,16 +88,10 @@ Or run directly without installing:
 ## Uninstallation
 
 ```bash
-./setup_BalkGrab.sh   # Choose 2) Uninstall
+./balkgrab/setup_BalkGrab.sh   # Choose 2) Uninstall
 ```
 
 Your settings and download history are kept by default (you will be asked).
-
-For `.deb` / `.rpm` installs:
-```bash
-sudo apt remove balkgrab      # Debian/Ubuntu
-sudo dnf remove balkgrab      # Fedora
-```
 
 ---
 
@@ -146,6 +114,7 @@ Access settings via the **Settings** tab.
 | Setting | Description |
 |---------|-------------|
 | **Language** | Switch between English, Deutsch, Hrvatski/Srpski. Requires restart. |
+| **Theme** | Choose from 7 dark themes or use System Default |
 | **Show system tray icon** | Display BalkGrab icon in the system tray |
 | **Minimize to system tray** | Minimize to tray instead of closing |
 | **Continue playing in tray** | Keep playing audio when minimized to tray |
@@ -156,6 +125,29 @@ Access settings via the **Settings** tab.
 | **Simultaneous downloads** | Number of parallel downloads (1-10) |
 | **Auto-play after download** | Automatically play files after download completes |
 | **Video player** | Set default external player for video files (VLC, MPV, etc.) |
+
+---
+
+## Project Structure
+
+```
+BalkGrab/
+├── balkgrab/               # Main application package
+│   ├── __init__.py         # Version and app name
+│   ├── __main__.py         # Entry point (python -m balkgrab)
+│   ├── app.py              # Main window and UI
+│   ├── workers.py          # Background workers (search, download, thumbnail)
+│   ├── models.py           # Data models and signals
+│   ├── widgets.py          # Custom Qt widgets
+│   ├── constants.py        # Paths and constants
+│   ├── translations.py     # Multi-language support (EN/DE/HR)
+│   ├── themes.py           # Theme definitions (easy to add new themes)
+│   ├── Icons/              # Application icons
+│   └── setup_BalkGrab.sh   # Install/update/uninstall script
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
 
 ---
 

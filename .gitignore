@@ -34,11 +34,13 @@ Thumbs.db
 pasted*.png
 
 # Build outputs (large files)
-*.exe
 *.AppImage
 *.deb
 *.rpm
 build-standalone/
+
+# Old monolithic file (replaced by balkgrab/ package)
+BalkGrab.py
 
 # Screenshot source files
 Novi screenshoti/

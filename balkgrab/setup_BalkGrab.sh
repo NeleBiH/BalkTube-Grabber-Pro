@@ -12,7 +12,7 @@ DESKTOP_FILE="$DESKTOP_DIR/balkgrab.desktop"
 ICON_DIR="$HOME/.local/share/icons/hicolor"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$INSTALL_DIR/.venv"
-LAUNCHER="$INSTALL_DIR/balkgrab"
+LAUNCHER="$INSTALL_DIR/launcher.sh"
 
 PY_PACKAGES="PySide6 yt-dlp requests"
 
@@ -48,9 +48,9 @@ print_err()  { echo -e "  ${BRIGHT_RED}✗ ERROR: $1${RESET}"; }
 # ==========================================
 get_version() {
     local ver
-    ver=$(grep -m1 'APP_VERSION\s*=' "$SCRIPT_DIR/BalkGrab.py" 2>/dev/null \
+    ver=$(grep -m1 'APP_VERSION\s*=' "$SCRIPT_DIR/__init__.py" 2>/dev/null \
           | grep -oP '"[^"]*"' | tr -d '"')
-    echo "${ver:-0.2.0-alpha}"
+    echo "${ver:-0.4.0}"
 }
 
 # ==========================================
@@ -61,18 +61,20 @@ show_header() {
     local ver_line; printf -v ver_line "%-41s" "v${version}"
     clear
     echo ""
-    echo -e "${CYAN}  ╔══════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}  ║${RESET}                                                                  ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}██████╗  ██████╗ ${RESET}                                          ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}██╔══██╗██╔════╝ ${RESET}  ${WHITE}${BOLD}BalkGrab${RESET}                                 ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}███████╗██║  ███╗${RESET}  ${CYAN}Free & Open Source YouTube Downloader${RESET}    ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}██╔══██║██║   ██║${RESET}  ${DIM}${ver_line}${RESET}${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}██████╔╝╚██████╔╝${RESET}                                          ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}╚═════╝  ╚═════╝ ${RESET}                                          ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ║${RESET}                                                                  ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ╠══════════════════════════════════════════════════════════════════╣${RESET}"
-    echo -e "${CYAN}  ║${RESET}       ${YELLOW}★${RESET}  ${BOLD}Welcome to the BalkGrab Setup Script${RESET}  ${YELLOW}★${RESET}           ${CYAN}║${RESET}"
-    echo -e "${CYAN}  ╚══════════════════════════════════════════════════════════════════╝${RESET}"
+    echo -e "${CYAN}  ╔═══════════════════════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}  ║${RESET}                                                                  ${CYAN}                     ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}  ██  ${RESET} ${BRIGHT_RED}█▄${RESET}      ${BRIGHT_GREEN}██████╗  █████╗ ██╗     ██╗  ██╗  ██████╗ ██████╗  █████╗ ██████╗${RESET} ${CYAN}   ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}  ██   ${RESET}${BRIGHT_RED}████▄${RESET}   ${BRIGHT_GREEN}██╔══██╗██╔══██╗██║     ██║ ██╔╝ ██╔════╝ ██╔══██╗██╔══██╗██╔══██╗${RESET}${CYAN}   ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}  ██   ${RESET}${BRIGHT_RED}██████▌${RESET} ${BRIGHT_GREEN}██████╔╝███████║██║     █████╔╝  ██║  ███╗██████╔╝███████║██████╔╝${RESET}${CYAN}   ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}██████ ${RESET}${BRIGHT_RED}██████▌${RESET} ${BRIGHT_GREEN}██╔══██╗██╔══██║██║     ██╔═██╗  ██║   ██║██╔══██╗██╔══██║██╔══██╗${RESET} ${CYAN}  ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN} ████  ${RESET}${BRIGHT_RED}████▀${RESET}   ${BRIGHT_GREEN}██████╔╝██║  ██║███████╗██║  ██╗ ╚██████╔╝██║  ██║██║  ██║██████╔╝${RESET} ${CYAN}  ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}   ${BRIGHT_GREEN}  ██  ${RESET} ${BRIGHT_RED}█▀${RESET}      ${BRIGHT_GREEN}╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝${RESET}  ${CYAN}   ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}             ${BRIGHT_GREEN}${RESET}                                                                      ${CYAN}    ║${RESET}"
+    echo -e "${CYAN}  ║               ${RESET}          ${CYAN}Free & Open Source YouTube Downloader${RESET}           ${CYAN}              ║${RESET}"
+    echo -e "${CYAN}  ║${RESET}                                     ${YELLOW}${ver_line}${RESET}${CYAN}         ║${RESET}"
+    echo -e "${CYAN}  ╠═══════════════════════════════════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${CYAN}  ║               ${RESET}       ${YELLOW}★${RESET}  ${BOLD}Welcome to the BalkGrab Setup Script${RESET}  ${YELLOW}★${RESET} ${CYAN}                      ║${RESET}"
+    echo -e "${CYAN}  ╚═══════════════════════════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
 }
 
@@ -187,6 +189,8 @@ install_system_deps() {
     fi
 
     print_ok "System dependencies ready"
+
+    install_deno
 }
 
 # ==========================================
@@ -252,9 +256,13 @@ create_launcher() {
     cat > "$LAUNCHER" << EOF
 #!/bin/bash
 export PATH="\$HOME/.deno/bin:\$PATH"
-exec "$VENV_DIR/bin/python" "$INSTALL_DIR/BalkGrab.py" "\$@"
+export PYTHONPATH="$INSTALL_DIR"
+exec "$VENV_DIR/bin/python" -m balkgrab "\$@"
 EOF
     chmod +x "$LAUNCHER"
+
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$LAUNCHER" "$HOME/.local/bin/balkgrab"
 }
 
 # ==========================================
@@ -290,15 +298,35 @@ install_deno() {
         print_ok "deno already installed"
         return
     fi
+
+    local pkg_mgr; pkg_mgr=$(detect_pkg_manager)
+    local installed=false
+
     print_info "Installing deno (needed for YouTube downloads)..."
-    if ! command -v curl &>/dev/null; then
-        print_warn "curl not found — install deno manually: https://deno.land"
-        return
+
+    case "$pkg_mgr" in
+        pacman)
+            sudo pacman -S --needed --noconfirm deno && installed=true
+            ;;
+        dnf)
+            sudo dnf install -y deno && installed=true
+            ;;
+        zypper)
+            sudo zypper install -y deno && installed=true
+            ;;
+    esac
+
+    if ! $installed; then
+        if command -v curl &>/dev/null; then
+            print_info "deno not in repos, installing via curl..."
+            curl -fsSL https://deno.land/install.sh | sh > /dev/null 2>&1 && installed=true
+        fi
     fi
-    if curl -fsSL https://deno.land/install.sh | sh > /dev/null 2>&1; then
-        print_ok "deno installed to ~/.deno/bin/"
+
+    if $installed && (command -v deno &>/dev/null || [[ -f "$HOME/.deno/bin/deno" ]]); then
+        print_ok "deno installed"
     else
-        print_warn "deno install failed — install manually: curl -fsSL https://deno.land/install.sh | sh"
+        print_warn "deno install failed — install manually: https://deno.land"
     fi
 }
 
@@ -325,6 +353,25 @@ cleanup_old_versions() {
         echo -e "  ${DIM}Removed old AppImage${RESET}"
         found=true
     fi
+    # Remove old single-file install (replaced by balkgrab/ package)
+    if [[ -f "$INSTALL_DIR/BalkGrab.py" ]]; then
+        rm -f "$INSTALL_DIR/BalkGrab.py"
+        echo -e "  ${DIM}Removed old BalkGrab.py${RESET}"
+        found=true
+    fi
+    # Remove old launcher at conflicting path (now launcher.sh)
+    # Only remove if it's a file (old launcher), not the balkgrab/ package directory
+    if [[ -f "$INSTALL_DIR/balkgrab" ]]; then
+        rm -f "$INSTALL_DIR/balkgrab"
+        echo -e "  ${DIM}Removed old launcher${RESET}"
+        found=true
+    fi
+    # Remove broken symlink from previous versions
+    if [[ -L "$HOME/.local/bin/balkgrab" ]]; then
+        rm -f "$HOME/.local/bin/balkgrab"
+        echo -e "  ${DIM}Removed broken symlink${RESET}"
+        found=true
+    fi
     $found && echo -e "  ${DIM}Old files cleaned up${RESET}" || true
 }
 
@@ -333,7 +380,7 @@ cleanup_old_versions() {
 # ==========================================
 do_install() {
     local is_update=false
-    [[ -f "$INSTALL_DIR/BalkGrab.py" ]] && is_update=true
+    [[ -d "$INSTALL_DIR/balkgrab" ]] && is_update=true
 
     echo ""
     if $is_update; then
@@ -347,9 +394,9 @@ do_install() {
     fi
     echo ""
 
-    # Provjeri postoji li BalkGrab.py u script diru
-    if [[ ! -f "$SCRIPT_DIR/BalkGrab.py" ]]; then
-        print_err "BalkGrab.py not found in $SCRIPT_DIR"
+    # Provjeri postoji li __init__.py u script diru (balkgrab paket)
+    if [[ ! -f "$SCRIPT_DIR/__init__.py" ]]; then
+        print_err "balkgrab package not found in $SCRIPT_DIR"
         exit 1
     fi
 
@@ -359,17 +406,22 @@ do_install() {
         cleanup_old_versions
         print_ok "Done"
 
-        print_step "[2/4] Copying BalkGrab.py + launcher..."
-        cp "$SCRIPT_DIR/BalkGrab.py" "$INSTALL_DIR/BalkGrab.py"
+        print_step "[2/4] Copying balkgrab package + launcher..."
+        rm -rf "$INSTALL_DIR/balkgrab"
+        cp -r "$SCRIPT_DIR" "$INSTALL_DIR/balkgrab"
+        rm -f "$INSTALL_DIR/balkgrab/setup_BalkGrab.sh"
+        rm -rf "$INSTALL_DIR/balkgrab/__pycache__"
+        if [[ ! -f "$INSTALL_DIR/balkgrab/__init__.py" ]]; then
+            print_err "Failed to copy balkgrab package"
+            exit 1
+        fi
         create_launcher
-        print_ok "BalkGrab.py updated ($(get_version))"
+        print_ok "BalkGrab updated ($(get_version))"
 
         print_step "[3/4] Updating icons and menu entry..."
         if [[ -d "$SCRIPT_DIR/Icons/linux" ]]; then
             install_icons "$SCRIPT_DIR/Icons/linux"
             print_ok "Icons updated"
-        else
-            print_warn "Icons directory not found — skipping"
         fi
         create_desktop_entry
         print_ok "Menu entry updated"
@@ -400,8 +452,15 @@ do_install() {
 
     print_step "[3/5] Setting up Python environment..."
     mkdir -p "$INSTALL_DIR"
-    cp "$SCRIPT_DIR/BalkGrab.py" "$INSTALL_DIR/BalkGrab.py"
-    print_ok "BalkGrab.py copied"
+    rm -rf "$INSTALL_DIR/balkgrab"
+    cp -r "$SCRIPT_DIR" "$INSTALL_DIR/balkgrab"
+    rm -f "$INSTALL_DIR/balkgrab/setup_BalkGrab.sh"
+    rm -rf "$INSTALL_DIR/balkgrab/__pycache__"
+    if [[ ! -f "$INSTALL_DIR/balkgrab/__init__.py" ]]; then
+        print_err "Failed to copy balkgrab package"
+        exit 1
+    fi
+    print_ok "BalkGrab package copied"
     setup_venv "false"
     create_launcher
     print_ok "Launcher created: $LAUNCHER"
@@ -410,15 +469,11 @@ do_install() {
     if [[ -d "$SCRIPT_DIR/Icons/linux" ]]; then
         install_icons "$SCRIPT_DIR/Icons/linux"
         print_ok "Icons installed"
-    else
-        print_warn "Icons directory not found — skipping"
     fi
 
     print_step "[5/5] Creating menu entry..."
     create_desktop_entry
     print_ok "Menu entry created"
-
-    install_deno
 
     echo ""
     echo -e "${CYAN}  ══════════════════════════════════════${RESET}"
@@ -456,6 +511,7 @@ do_uninstall() {
     else
         print_info "Not installed — skipping"
     fi
+    rm -f "$HOME/.local/bin/balkgrab"
 
     print_step "[2/4] Removing icons..."
     remove_icons
