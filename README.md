@@ -5,8 +5,7 @@
 <h1 align="center">BalkGrab</h1>
 
 <p align="center">
-  <strong>Free & Open Source YouTube Downloader</strong><br>
-  <em>Inspired by ClipGrab - Made for the Balkans</em>
+  <strong>Free & Open Source YouTube Downloader</strong>
 </p>
 
 <p align="center">
@@ -216,6 +215,3 @@ Thank you to all the contributors and maintainers of these projects!
 
 ---
 
-<p align="center">
-  Made with love for the Balkan community
-</p>

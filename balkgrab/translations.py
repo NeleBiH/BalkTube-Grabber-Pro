@@ -87,7 +87,7 @@ TRANSLATIONS = {
         'about_title': 'About BalkGrab',
         'about_description': '''
 <h3>What is this?</h3>
-<p>BalkGrab is a free, open-source YouTube downloader inspired by ClipGrab.
+<p>BalkGrab is a free, open-source YouTube downloader.
 Download videos in various resolutions or convert them to audio formats like MP3, FLAC, and more!</p>
 
 <h3>Features</h3>
@@ -115,7 +115,6 @@ Download videos in various resolutions or convert them to audio formats like MP3
 <tr><td><b>yt-dlp</b> — Video downloader</td><td align="right"><a href="https://github.com/yt-dlp/yt-dlp">github.com/yt-dlp</a></td></tr>
 <tr><td><b>FFmpeg</b> — Audio/Video processing</td><td align="right"><a href="https://ffmpeg.org">ffmpeg.org</a></td></tr>
 <tr><td><b>Deno</b> — JavaScript runtime</td><td align="right"><a href="https://deno.land">deno.land</a></td></tr>
-<tr><td><b>ClipGrab</b> — Inspiration</td><td align="right"><a href="https://clipgrab.org">clipgrab.org</a></td></tr>
 </table>
 ''',
         'license_title': 'License',
@@ -243,7 +242,7 @@ copies or substantial portions of the Software.</p>
         'about_title': 'Über BalkGrab',
         'about_description': '''
 <h3>Was ist das?</h3>
-<p>BalkGrab ist ein kostenloser, Open-Source YouTube-Downloader inspiriert von ClipGrab.
+<p>BalkGrab ist ein kostenloser, Open-Source YouTube-Downloader.
 Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie sie in Audioformate wie MP3, FLAC und mehr!</p>
 
 <h3>Funktionen</h3>
@@ -271,7 +270,6 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
 <tr><td><b>yt-dlp</b> — Video-Downloader</td><td align="right"><a href="https://github.com/yt-dlp/yt-dlp">github.com/yt-dlp</a></td></tr>
 <tr><td><b>FFmpeg</b> — Audio/Video-Verarbeitung</td><td align="right"><a href="https://ffmpeg.org">ffmpeg.org</a></td></tr>
 <tr><td><b>Deno</b> — JavaScript-Laufzeitumgebung</td><td align="right"><a href="https://deno.land">deno.land</a></td></tr>
-<tr><td><b>ClipGrab</b> — Inspiration</td><td align="right"><a href="https://clipgrab.org">clipgrab.org</a></td></tr>
 </table>
 ''',
         'license_title': 'Lizenz',
@@ -373,7 +371,7 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'about_title': 'O aplikaciji BalkGrab',
         'about_description': '''
 <h3>Šta je ovo?</h3>
-<p>BalkGrab je besplatan YouTube downloader otvorenog koda inspiriran ClipGrab-om.
+<p>BalkGrab je besplatan YouTube downloader otvorenog koda.
 Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC i druge!</p>
 
 <h3>Mogućnosti</h3>
@@ -401,7 +399,6 @@ Skidaj videe u raznim rezolucijama ili ih pretvori u audio formate kao MP3, FLAC
 <tr><td><b>yt-dlp</b> — Video downloader</td><td align="right"><a href="https://github.com/yt-dlp/yt-dlp">github.com/yt-dlp</a></td></tr>
 <tr><td><b>FFmpeg</b> — Obrada audio/video zapisa</td><td align="right"><a href="https://ffmpeg.org">ffmpeg.org</a></td></tr>
 <tr><td><b>Deno</b> — JavaScript okruženje</td><td align="right"><a href="https://deno.land">deno.land</a></td></tr>
-<tr><td><b>ClipGrab</b> — Inspiracija</td><td align="right"><a href="https://clipgrab.org">clipgrab.org</a></td></tr>
 </table>
 ''',
         'license_title': 'Licenca',
