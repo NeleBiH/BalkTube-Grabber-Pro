@@ -78,8 +78,9 @@ Run the setup script again and choose **1) Install / Update**. Your settings and
 ```bash
 git clone https://github.com/NeleBiH/BalkGrab.git
 cd BalkGrab
-pip install PySide6 yt-dlp requests
-python -m balkgrab
+python3 -m venv .venv
+.venv/bin/pip install PySide6 yt-dlp requests
+.venv/bin/python -m balkgrab
 ```
 
 ---
@@ -164,7 +165,7 @@ BalkGrab/
 Make sure deno is installed and yt-dlp is up to date:
 ```bash
 curl -fsSL https://deno.land/install.sh | sh   # Install deno
-pip install --upgrade --pre yt-dlp              # Update yt-dlp
+~/.balkgrab/.venv/bin/pip install --upgrade yt-dlp   # Update yt-dlp
 ```
 
 ### "Could not find cookies database"
