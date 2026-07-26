@@ -135,7 +135,6 @@ Access settings via the **Settings** tab.
 | **Download location** | Choose where files are saved (default: `~/Downloads`) |
 | **Browser cookies** | Auto-detected. Used for age-restricted videos and to avoid bot detection. |
 | **Simultaneous downloads** | Number of parallel downloads (1-10) |
-| **Auto-play after download** | Automatically play files after download completes |
 | **Video player** | Set default external player for video files (VLC, MPV, etc.) |
 
 ---

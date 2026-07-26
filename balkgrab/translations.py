@@ -1,7 +1,5 @@
 """All UI translations: English, Deutsch, Hrvatski/Srpski."""
 
-from . import APP_VERSION
-
 TRANSLATIONS = {
     'en': {
         'app_title': 'BalkGrab',
@@ -80,10 +78,7 @@ TRANSLATIONS = {
         'open_in_browser': 'Open in browser',
         'copy_url': 'Copy URL',
         'copy_title': 'Copy title',
-        'auto_play': 'Auto-play after download',
         'download_location': 'Download location:',
-        'save_settings': 'Save Settings',
-        'settings_saved': 'Settings saved!',
         'about_title': 'About BalkGrab',
         'about_description': '''
 <h3>What is this?</h3>
@@ -235,10 +230,7 @@ copies or substantial portions of the Software.</p>
         'open_in_browser': 'Im Browser öffnen',
         'copy_url': 'URL kopieren',
         'copy_title': 'Titel kopieren',
-        'auto_play': 'Nach Download automatisch abspielen',
         'download_location': 'Download-Speicherort:',
-        'save_settings': 'Einstellungen speichern',
-        'settings_saved': 'Einstellungen gespeichert!',
         'about_title': 'Über BalkGrab',
         'about_description': '''
 <h3>Was ist das?</h3>
@@ -364,10 +356,7 @@ Laden Sie Videos in verschiedenen Auflösungen herunter oder konvertieren Sie si
         'open_in_browser': 'Otvori u pregledniku',
         'copy_url': 'Kopiraj URL',
         'copy_title': 'Kopiraj naslov',
-        'auto_play': 'Automatski pusti nakon preuzimanja',
         'download_location': 'Lokacija preuzimanja:',
-        'save_settings': 'Spremi postavke',
-        'settings_saved': 'Postavke spremljene!',
         'about_title': 'O aplikaciji BalkGrab',
         'about_description': '''
 <h3>Šta je ovo?</h3>

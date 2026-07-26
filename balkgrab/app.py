@@ -1,6 +1,5 @@
 """Main window class for BalkGrab."""
 
-import sys
 import os
 import json
 import threading
@@ -121,9 +120,6 @@ class BalkGrabGrabber(QMainWindow):
         self.setup_ui()
         self.setup_system_tray()
         self.connect_signals()
-
-        # Load settings
-        self.load_settings()
 
         # Load previous downloads
         self.load_downloads()
@@ -589,7 +585,6 @@ class BalkGrabGrabber(QMainWindow):
 
         # Timer for position update
         self.position_timer = QTimer()
-        self.position_timer.timeout.connect(self.update_position)
         self.slider_is_pressed = False
 
         # Media player signals
@@ -733,10 +728,6 @@ class BalkGrabGrabber(QMainWindow):
         self.embed_metadata_checkbox.setChecked(self.settings.value("embed_metadata", True, type=bool))
         downloads_layout.addWidget(self.embed_metadata_checkbox)
 
-        self.auto_play_checkbox = QCheckBox(self.get_text('auto_play'))
-        self.auto_play_checkbox.setChecked(self.settings.value("auto_play", False, type=bool))
-        downloads_layout.addWidget(self.auto_play_checkbox)
-
         # Browser cookies for age-restricted videos
         cookies_layout = QHBoxLayout()
         cookies_label = QLabel("Browser cookies:")
@@ -801,11 +792,19 @@ class BalkGrabGrabber(QMainWindow):
 
         layout.addStretch()
 
-        # Save button
-        save_btn = QPushButton(self.get_text('save_settings'))
-        save_btn.clicked.connect(self.save_settings)
-        save_btn.setMaximumWidth(250)
-        layout.addWidget(save_btn, alignment=Qt.AlignCenter)
+        # Auto-save: connect all settings widgets to save_settings
+        self.language_combo.currentIndexChanged.connect(self.save_settings)
+        self.theme_combo.currentIndexChanged.connect(self.save_settings)
+        self.tray_checkbox.stateChanged.connect(self.save_settings)
+        self.minimize_tray_checkbox.stateChanged.connect(self.save_settings)
+        self.continue_playing_tray_checkbox.stateChanged.connect(self.save_settings)
+        self.start_minimized_checkbox.stateChanged.connect(self.save_settings)
+        self.notifications_checkbox.stateChanged.connect(self.save_settings)
+        self.clipboard_monitor_checkbox.stateChanged.connect(self.save_settings)
+        self.simultaneous_spin.valueChanged.connect(self.save_settings)
+        self.speed_limit_spin.valueChanged.connect(self.save_settings)
+        self.embed_metadata_checkbox.stateChanged.connect(self.save_settings)
+        self.cookies_browser_combo.currentIndexChanged.connect(self.save_settings)
 
         scroll.setWidget(tab)
         return scroll
@@ -996,10 +995,6 @@ class BalkGrabGrabber(QMainWindow):
         self.preview_player.playbackStateChanged.connect(self.on_preview_state_changed)
         self.preview_player.mediaStatusChanged.connect(self.on_preview_media_status)
 
-    def load_settings(self):
-        """Load saved settings"""
-        pass  # Already loaded in __init__
-
     def save_settings(self):
         """Save settings"""
         new_lang = self.language_combo.currentData()
@@ -1014,7 +1009,6 @@ class BalkGrabGrabber(QMainWindow):
         self.settings.setValue("simultaneous_downloads", self.simultaneous_spin.value())
         self.settings.setValue("speed_limit", self.speed_limit_spin.value())
         self.settings.setValue("embed_metadata", self.embed_metadata_checkbox.isChecked())
-        self.settings.setValue("auto_play", self.auto_play_checkbox.isChecked())
         self.settings.setValue("output_path", self.output_path)
         self.settings.setValue("cookies_browser", self.cookies_browser_combo.currentData())
 
@@ -1027,18 +1021,13 @@ class BalkGrabGrabber(QMainWindow):
         if self.tray_icon:
             self.tray_icon.setVisible(self.tray_checkbox.isChecked())
 
-        # Show message
+        # Language change requires restart
         if new_lang != self.current_language:
             QMessageBox.information(
                 self,
                 "Language Changed",
                 "Please restart the application to apply language changes."
             )
-        else:
-            self.status_label.setText(self.get_text('settings_saved'))
-
-        log.info("Settings saved")
-        self.set_statusbar(self.get_text('settings_saved'))
 
     def load_downloads(self):
         """Load downloads history from JSON file"""
@@ -1656,6 +1645,8 @@ class BalkGrabGrabber(QMainWindow):
         selected = []
         for row in range(self.results_list.count()):
             item = self.results_list.item(row)
+            if not item:
+                continue
             widget = self.results_list.itemWidget(item)
             if widget and isinstance(widget, VideoItemWidget) and widget.checkbox.isChecked():
                 index = item.data(Qt.UserRole)
@@ -2200,10 +2191,6 @@ class BalkGrabGrabber(QMainWindow):
                 3000
             )
 
-        # Auto-play
-        if self.settings.value("auto_play", False, type=bool):
-            self.play_downloaded(download_id)
-
         # Save downloads history
         self.save_downloads()
 
@@ -2267,27 +2254,6 @@ class BalkGrabGrabber(QMainWindow):
 
         # Save downloads history
         self.save_downloads()
-
-    def play_downloaded(self, download_id: str):
-        """Play downloaded file"""
-        if download_id in self.downloads:
-            download = self.downloads[download_id]
-            filepath = download.filepath
-
-            if filepath and os.path.exists(filepath):
-                log.info(f"Playing: {filepath}")
-
-                # Stop all other audio first
-                self.stop_all_audio()
-                self.media_player.setSource(QUrl.fromLocalFile(filepath))
-                self.media_player.play()
-
-                self.now_playing_label.setText(f"{self.get_text('now_playing')} {download.title}")
-                self.player_is_playing = True
-                self.position_timer.start(1000)
-            else:
-                log.warning(f"File not found: {filepath}")
-                QMessageBox.warning(self, "File Not Found", f"Cannot find: {filepath}")
 
     def on_table_btn_clicked(self, download_id: str, btn: QPushButton):
         """Dispatch table action button click based on current btn_state"""
@@ -2401,11 +2367,13 @@ class BalkGrabGrabber(QMainWindow):
         config = self.load_app_config()
         video_player = config.get('video_player', '')
 
-        # If no player configured, ask user
+        # If no player configured, ask user and save choice
         if not video_player:
             video_player = self.select_external_player("video")
             if not video_player:
                 return  # User cancelled
+            config['video_player'] = video_player
+            self.save_app_config(config)
 
         # Kill previous external player if running
         self.kill_external_player()
@@ -2551,10 +2519,6 @@ class BalkGrabGrabber(QMainWindow):
         """Change volume"""
         self.audio_output.setVolume(value / 100.0)
         self.volume_label.setText(f"{value}%")
-
-    def update_position(self):
-        """Update position display"""
-        pass  # Handled by signals now
 
     def on_position_changed(self, position):
         """Handle position change"""
